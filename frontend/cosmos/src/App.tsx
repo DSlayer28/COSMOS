@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Dashboard } from './components/Dashboard'
-// import { Map } from './components/Map'
+import { Map } from './components/Map'
 import { Chat } from './components/Chat'
 import './App.css'
 
@@ -11,8 +11,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-       
-       
+       <Route path="/map" element={<Map />} />
         <Route path="/chat" element={<Chat />} />
 
       </Routes>
