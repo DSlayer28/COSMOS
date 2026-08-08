@@ -45,6 +45,7 @@ export function Map() {
         }
         socket.on('pins-history', (history: Pin[]) => setPins(history))
         socket.on('pin-added', (pin: Pin) => setPins(prev => [...prev, pin]))
+        socket.emit('request-pins-history')   // NEW
 
         return () => {
             socket.off('pins-history')

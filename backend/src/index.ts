@@ -47,6 +47,16 @@ io.on('connection', (socket) => {
     socket.emit('chat-history',chatHistory)
     socket.emit('pins-history',pins)
 
+
+
+    // NEW: let a client ask for history whenever ITS component mounts
+    socket.on('request-chat-history', () => {
+        socket.emit('chat-history', chatHistory)
+    })
+    socket.on('request-pins-history', () => {
+        socket.emit('pins-history', pins)
+    })
+
     // Broadcast to all OTHER users
     socket.on('user-message', (data: { message: string }) => {
         const entry:ChatMessage={
