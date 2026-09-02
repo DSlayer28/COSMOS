@@ -1,0 +1,276 @@
+[
+  {
+    "id": "res-001",
+    "name": "Victoria Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9634,
+    "lng": 77.5740,
+    "description": "Major government teaching hospital and emergency medical facility in central Bengaluru.",
+    "status": "UNKNOWN",
+    "services": {
+      "Emergency Care": "available",
+      "Trauma Care": "available",
+      "General Medicine": "available",
+      "Surgery": "available",
+      "Medical Specialists": "available",
+      "Ambulance": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-002",
+    "name": "Bowring and Lady Curzon Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9828,
+    "lng": 77.6045,
+    "description": "Major government hospital in Shivajinagar providing general and specialist medical services.",
+    "status": "UNKNOWN",
+    "services": {
+      "Emergency Care": "available",
+      "General Medicine": "available",
+      "General Surgery": "available",
+      "Orthopaedics": "available",
+      "Trauma Care": "available",
+      "Ambulance": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-003",
+    "name": "K.C. General Hospital",
+    "type": "HOSPITAL",
+    "lat": 13.0027,
+    "lng": 77.5706,
+    "description": "Government general hospital serving the Malleswaram and surrounding areas.",
+    "status": "UNKNOWN",
+    "services": {
+      "Emergency Care": "available",
+      "General Medicine": "available",
+      "General Surgery": "available",
+      "Outpatient Care": "available",
+      "Emergency Medicines": "unknown",
+      "Ambulance": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-004",
+    "name": "Vani Vilas Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9625,
+    "lng": 77.5748,
+    "description": "Government hospital specializing in maternity and child healthcare.",
+    "status": "UNKNOWN",
+    "services": {
+      "Maternity Care": "available",
+      "Women and Child Health": "available",
+      "Emergency Care": "unknown",
+      "Paediatric Care": "available",
+      "Neonatal Care": "unknown",
+      "Ambulance": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-005",
+    "name": "Indira Gandhi Institute of Child Health",
+    "type": "HOSPITAL",
+    "lat": 12.9388,
+    "lng": 77.5892,
+    "description": "Government specialist hospital focused on children's healthcare.",
+    "status": "UNKNOWN",
+    "services": {
+      "Paediatric Care": "available",
+      "Child Emergency Care": "unknown",
+      "Neonatal Care": "unknown",
+      "Child Surgery": "unknown",
+      "Emergency Medicines": "unknown",
+      "Ambulance": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-006",
+    "name": "Sanjay Gandhi Institute of Trauma and Orthopaedics",
+    "type": "HOSPITAL",
+    "lat": 12.9365,
+    "lng": 77.5884,
+    "description": "Government specialist trauma and orthopaedic hospital.",
+    "status": "UNKNOWN",
+    "services": {
+      "Trauma Care": "available",
+      "Orthopaedics": "available",
+      "Polytrauma": "available",
+      "Neurosurgery": "available",
+      "Burns Care": "available",
+      "Emergency Care": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-007",
+    "name": "Kidwai Memorial Institute of Oncology",
+    "type": "HOSPITAL",
+    "lat": 12.9342,
+    "lng": 77.5980,
+    "description": "Government specialist cancer hospital and oncology institute.",
+    "status": "UNKNOWN",
+    "services": {
+      "Oncology": "available",
+      "Cancer Treatment": "available",
+      "Emergency Care": "unknown",
+      "Radiation Oncology": "available",
+      "Surgical Oncology": "available",
+      "Medicines": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-008",
+    "name": "Jayanagar General Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9278,
+    "lng": 77.5948,
+    "description": "Government general hospital serving Jayanagar and surrounding areas.",
+    "status": "UNKNOWN",
+    "services": {
+      "Emergency Care": "available",
+      "General Medicine": "available",
+      "General Surgery": "available",
+      "Outpatient Care": "available",
+      "Maternity Care": "unknown",
+      "Ambulance": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-009",
+    "name": "Sir C.V. Raman General Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9784,
+    "lng": 77.6412,
+    "description": "Government general hospital serving Indiranagar and surrounding areas.",
+    "status": "UNKNOWN",
+    "services": {
+      "Emergency Care": "available",
+      "General Medicine": "available",
+      "General Surgery": "available",
+      "Outpatient Care": "available",
+      "Emergency Medicines": "unknown",
+      "Ambulance": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-010",
+    "name": "Rajiv Gandhi Institute of Chest Diseases",
+    "type": "HOSPITAL",
+    "lat": 12.9425,
+    "lng": 77.5965,
+    "description": "Government specialist institute for respiratory and chest diseases.",
+    "status": "UNKNOWN",
+    "services": {
+      "Respiratory Care": "available",
+      "Chest Diseases": "available",
+      "Pulmonary Care": "available",
+      "Emergency Care": "unknown",
+      "Medicines": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-011",
+    "name": "Institute of Nephro-Urology",
+    "type": "MEDICAL_CENTER",
+    "lat": 12.9630,
+    "lng": 77.5737,
+    "description": "Government specialist institute located within the Victoria Hospital campus.",
+    "status": "UNKNOWN",
+    "services": {
+      "Nephrology": "available",
+      "Urology": "available",
+      "Kidney Care": "available",
+      "Emergency Care": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-012",
+    "name": "Minto Eye Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9615,
+    "lng": 77.5755,
+    "description": "Government specialist eye hospital near the Victoria Hospital campus.",
+    "status": "UNKNOWN",
+    "services": {
+      "Eye Emergency": "unknown",
+      "Ophthalmology": "available",
+      "Eye Surgery": "available",
+      "Emergency Care": "unknown"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-013",
+    "name": "Banashankari Referral Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9258,
+    "lng": 77.5600,
+    "description": "Government referral hospital serving the Banashankari area.",
+    "status": "UNKNOWN",
+    "services": {
+      "General Medicine": "available",
+      "Emergency Care": "unknown",
+      "Outpatient Care": "available",
+      "Referral Services": "available"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-014",
+    "name": "H. Siddaiah Road Referral Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9555,
+    "lng": 77.5885,
+    "description": "Government referral hospital near J.C. Road and Minerva Circle.",
+    "status": "UNKNOWN",
+    "services": {
+      "General Medicine": "available",
+      "Emergency Care": "unknown",
+      "Outpatient Care": "available",
+      "Referral Services": "available"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  },
+  {
+    "id": "res-015",
+    "name": "Srirampura Referral Hospital",
+    "type": "HOSPITAL",
+    "lat": 12.9895,
+    "lng": 77.5685,
+    "description": "Government referral hospital serving the Srirampura area.",
+    "status": "UNKNOWN",
+    "services": {
+      "General Medicine": "available",
+      "Emergency Care": "unknown",
+      "Outpatient Care": "available",
+      "Referral Services": "available"
+    },
+    "lastVerifiedAt": 0,
+    "verifiedBy": ""
+  }
+]

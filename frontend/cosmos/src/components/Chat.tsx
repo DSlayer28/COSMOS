@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { socket } from '../socket'
-
-type Message = {
-    id?: string
-    name: string
-    message: string
-    self?: boolean
-}
+import type { ChatMessage, DisasterRequest, ResourceAggregator } from '../../../../backend/src/shared/types'
+import { RequestCard } from './RequestCard'
+import { ResourceCard } from './ResourceCard'
 
 export function Chat() {
     const [username, setUsername] = useState<string>(
@@ -16,9 +12,13 @@ export function Chat() {
     const [joined, setJoined] = useState(false)
     const [inputName, setInputName] = useState('')
     const [message, setMessage] = useState('')
-    const [messages, setMessages] = useState<Message[]>([])
+    const [messages, setMessages] = useState<(ChatMessage & { self?: boolean })[]>([])
     const [connected, setConnected] = useState(socket.connected)
+    const [drawerOpen, setDrawerOpen] = useState(false)
+    const [requests, setRequests] = useState<DisasterRequest[]>([])
+    const [resources, setResources] = useState<ResourceAggregator[]>([])
     const bottomRef = useRef<HTMLDivElement>(null)
+    const userId = localStorage.getItem('chat-userid') || ''
 
     // Socket events — listeners registered BEFORE connect so chat-history is never missed
     useEffect(() => {
@@ -29,7 +29,7 @@ export function Chat() {
         const onConnect = () => setConnected(true)
         const onDisconnect = () => setConnected(false)
 
-        const onHistory = (history: Message[]) => {
+        const onHistory = (history: ChatMessage[]) => {
             // Merge server history with any local system messages (e.g. "You joined as...")
             setMessages(prev => {
                 const systemMsgs = prev.filter(m => m.name === 'System')
@@ -38,7 +38,7 @@ export function Chat() {
             })
         }
 
-        const onServerMessage = (data: Message) => {
+        const onServerMessage = (data: ChatMessage) => {
             setMessages(prev => [...prev, { ...data, self: false }])
         }
 
@@ -46,8 +46,17 @@ export function Chat() {
         socket.on('disconnect', onDisconnect)
         socket.on('chat-history', onHistory)
         socket.on('server-message', onServerMessage)
+        
+        socket.on('requests-history', (history: DisasterRequest[]) => setRequests(history))
+        socket.on('request-created', (req: DisasterRequest) => setRequests(prev => [...prev, req]))
+        socket.on('request-updated', (req: DisasterRequest) => setRequests(prev => prev.map(p => p.id === req.id ? req : p)))
 
-        socket.emit('request-chat-history') // NEW: ask the server directly instead of hoping we catch its one-time push
+        socket.on('resources-history', (history: ResourceAggregator[]) => setResources(history))
+        socket.on('resource-updated', (res: ResourceAggregator) => setResources(prev => prev.map(p => p.id === res.id ? res : p)))
+
+        socket.emit('request-chat-history')
+        socket.emit('request-requests-history')
+        socket.emit('request-resources')
 
         // Connect AFTER all listeners are in place
         if (!socket.connected) socket.connect()
@@ -57,6 +66,11 @@ export function Chat() {
             socket.off('disconnect', onDisconnect)
             socket.off('chat-history', onHistory)
             socket.off('server-message', onServerMessage)
+            socket.off('requests-history')
+            socket.off('request-created')
+            socket.off('request-updated')
+            socket.off('resources-history')
+            socket.off('resource-updated')
         }
     }, [username])
 
@@ -71,14 +85,14 @@ export function Chat() {
         localStorage.setItem('chat-username', name)
         setJoined(true)
         // Add system message first, then setUsername triggers useEffect → connect → chat-history
-        setMessages([{ name: 'System', message: `You joined as "${name}"`, self: false }])
+        setMessages([{ id: 'sys1', name: 'System', message: `You joined as "${name}"`, timestamp: Date.now(), self: false }])
         setUsername(name)
     }
 
     const handleSend = () => {
         const text = message.trim()
         if (!text || !connected) return
-        setMessages(prev => [...prev, { name: username, message: text, self: true }])
+        setMessages(prev => [...prev, { id: Date.now().toString(), name: username, message: text, timestamp: Date.now(), self: true }])
         socket.emit('user-message', { message: text })
         setMessage('')
     }
@@ -142,7 +156,7 @@ export function Chat() {
             {/* Header */}
             <div className="bg-slate-900/80 border-b border-white/[0.06] px-3 sm:px-5 py-3 sm:py-3.5 flex items-center justify-between backdrop-blur-xl shrink-0 z-10">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                    <Link to="/" className="text-white hover:text-white transition shrink-0 p-1">
+                    <Link to="/" className="text-white hover:text-white transition shrink-0 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded" aria-label="Back to Dashboard">
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
                         </svg>
@@ -153,11 +167,56 @@ export function Chat() {
                         <p className="text-slate-400 text-[10px] sm:text-xs truncate">Open to everyone on the network</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.04] px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/[0.06] shrink-0 ml-2">
-                    <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${connected ? 'bg-emerald-400 shadow shadow-emerald-400/50' : 'bg-rose-400 shadow shadow-rose-400/50'}`} />
-                    <span className="text-[10px] sm:text-xs text-slate-400 font-medium">{connected ? 'Live' : 'Offline'}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                    <button 
+                        onClick={() => setDrawerOpen(!drawerOpen)}
+                        className="bg-[#FFFDD0]/10 text-[#FFFDD0] border border-[#FFFDD0]/20 hover:bg-[#FFFDD0]/20 text-[10px] sm:text-xs px-2.5 py-1.5 rounded-full transition font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]"
+                        aria-expanded={drawerOpen}
+                        aria-label="Toggle Available Resources Drawer"
+                    >
+                        {drawerOpen ? 'Close Resources' : 'Resources'}
+                    </button>
+                    <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.04] px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/[0.06]">
+                        <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${connected ? 'bg-emerald-400 shadow shadow-emerald-400/50' : 'bg-rose-400 shadow shadow-rose-400/50'}`} />
+                        <span className="text-[10px] sm:text-xs text-slate-400 font-medium">{connected ? 'Live' : 'Offline'}</span>
+                    </div>
                 </div>
             </div>
+
+            {drawerOpen && (
+                <div className="absolute right-0 top-[60px] bottom-[70px] w-full sm:w-80 bg-slate-900 border-l border-white/10 shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200">
+                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-900/50">
+                        <h2 className="text-white font-bold text-sm">Available Resources</h2>
+                        <button 
+                            onClick={() => setDrawerOpen(false)} 
+                            className="text-slate-400 hover:text-white text-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-full w-8 h-8 flex items-center justify-center"
+                            aria-label="Close Resources Drawer"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {resources.filter(r => r.status === 'OPEN' || r.status === 'LIMITED').map(res => (
+                            <div key={res.id} className="relative group">
+                                <ResourceCard resource={res} />
+                                <button 
+                                    onClick={() => {
+                                        socket.emit('share-resource', { resourceId: res.id, message: `Check out this resource: ${res.name}` })
+                                        if (window.innerWidth < 640) setDrawerOpen(false) // auto close on mobile
+                                    }}
+                                    className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs px-3 py-1.5 rounded shadow-lg transition opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                    aria-label={`Share ${res.name} to chat`}
+                                >
+                                    Share
+                                </button>
+                            </div>
+                        ))}
+                        {resources.filter(r => r.status === 'OPEN' || r.status === 'LIMITED').length === 0 && (
+                            <div className="text-center text-slate-500 text-xs mt-10">No resources available.</div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-6 space-y-2.5 sm:space-y-3">
@@ -178,7 +237,7 @@ export function Chat() {
                             <span className="text-[10px] sm:text-[11px] text-slate-500 mb-0.5 sm:mb-1 ml-3 font-medium">{msg.name}</span>
                         )}
                         <div
-                            className={`max-w-[85%] sm:max-w-[75%] px-3.5 sm:px-4 py-2 sm:py-2.5 text-[13px] sm:text-sm leading-relaxed
+                            className={`max-w-[90%] sm:max-w-[80%] px-3.5 sm:px-4 py-2 sm:py-2.5 text-[13px] sm:text-sm leading-relaxed
                 ${msg.self
                                     ? 'bg-gradient-to-r from-[#FFFDD0] to-[#FFFDD0] text-black rounded-2xl rounded-br-md shadow shadow-[#FFFDD0]'
                                     : msg.name === 'System'
@@ -186,7 +245,21 @@ export function Chat() {
                                         : 'bg-white/[0.05] text-slate-200 rounded-2xl rounded-bl-md border border-white/[0.06]'
                                 }`}
                         >
-                            {msg.message}
+                            {msg.attachment ? (
+                                <div className="flex flex-col gap-2">
+                                    {msg.message && <span className="font-semibold">{msg.message}</span>}
+                                    <div className={`${msg.self ? '[&>div]:!bg-black/10 [&>div]:!border-black/20 [&_h3]:!text-black [&_p]:!text-black/80 [&_span]:!text-black [&_button]:!bg-black/5' : ''}`}>
+                                        {msg.attachment.type === 'request' && requests.find(r => r.id === msg.attachment!.id) && (
+                                            <RequestCard request={requests.find(r => r.id === msg.attachment!.id)!} currentUserId={userId} />
+                                        )}
+                                        {msg.attachment.type === 'resource' && resources.find(r => r.id === msg.attachment!.id) && (
+                                            <ResourceCard resource={resources.find(r => r.id === msg.attachment!.id)!} />
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                msg.message
+                            )}
                         </div>
                     </div>
                 ))}
@@ -202,18 +275,19 @@ export function Chat() {
                     id="message-input"
                     type="text"
                     placeholder="Type a message..."
+                    aria-label="Message input"
                     value={message}
                     onChange={e => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                     disabled={!connected}
                     autoComplete="off"
-                    className="flex-1 min-w-0 bg-white/[0.04] text-white placeholder-slate-500 border border-white/10 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black transition disabled:opacity-30"
+                    className="flex-1 min-w-0 bg-white/[0.04] text-white placeholder-slate-500 border border-white/10 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-sm outline-none focus:border-[#FFFDD0] focus:ring-1 focus:ring-[#FFFDD0] transition disabled:opacity-30"
                 />
                 <button
                     id="send-btn"
                     onClick={handleSend}
                     disabled={!message.trim() || !connected}
-                    className="bg-gradient-to-r from-[#FFFDD0] to-[#FFFDD0] hover:from-[#FFFDD0] hover:to-[#FFFDD0] disabled:opacity-30 disabled:cursor-not-allowed text-black px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 shadow shadow-black/20 shrink-0"
+                    className="bg-gradient-to-r from-[#FFFDD0] to-[#FFFDD0] hover:from-[#FFFDD0] hover:to-[#FFFDD0] disabled:opacity-30 disabled:cursor-not-allowed text-black px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 shadow shadow-black/20 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                     Send
                 </button>

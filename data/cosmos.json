@@ -1,0 +1,30 @@
+{
+  "users": {
+    "test-user-id": {
+      "id": "test-user-id",
+      "name": "TestUser",
+      "lat": null,
+      "lng": null,
+      "status": "unknown",
+      "role": "civilian",
+      "medical_notes": null,
+      "is_online": false,
+      "last_seen": 1788353434754,
+      "created_at": 1788353348730,
+      "updated_at": 1788353434754
+    },
+    "401cbe06-fc97-4b5c-8099-f7b42509481a": {
+      "id": "401cbe06-fc97-4b5c-8099-f7b42509481a",
+      "name": "Pravar",
+      "lat": null,
+      "lng": null,
+      "status": "unknown",
+      "role": "civilian",
+      "medical_notes": null,
+      "is_online": false,
+      "last_seen": 1788363534907,
+      "created_at": 1788363267371,
+      "updated_at": 1788363534907
+    }
+  }
+}
