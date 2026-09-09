@@ -117,3 +117,22 @@ This document tracks all meaningful technical decisions, architecture choices, a
     *   Rewrote `PROJECT.md` completely to reflect the new `DisasterRequest` and `ResourceAggregator` models, removing outdated pin references.
     *   Updated `FLOW.md` to precisely track the lifecycle of a Request and Resource through the WebSocket network.
 *   **Reasoning**: Programmatic socket testing ensures the backend rules engine (which enforces priority caps and aging) works independently of the frontend UI, validating the system's resilience against malformed or out-of-order client events.
+
+### [Bug Fix: LAN Connectivity and Socket Issues] - 2026-09-03
+
+*   **Context/Problem**: Devices on the LAN couldn't access Vite, the backend socket connection failed on non-5173 dev ports, and the Chat component created duplicate user records on navigation.
+*   **Decision**: Fixed three isolated bugs across the stack.
+*   **Reasoning**: 
+    *   Added `host: true` to Vite config so the dev server listens on all network interfaces (0.0.0.0) instead of just localhost.
+    *   Updated `backendUrl` in `socket.ts` to check `port !== '3001'` to ensure proper routing regardless of Vite's dynamic dev port.
+    *   Included persistent `userId` in `Chat.tsx` socket query to prevent the backend from generating a new UUID on every chat mount.
+
+### [Feature: Live User Locations] - 2026-09-03
+
+*   **Context/Problem**: Users needed to see where other connected responders were in real-time, but without clogging the network with rapid updates or exposing sensitive medical information to the entire LAN.
+*   **Decision**: 
+    *   Implemented `navigator.geolocation.watchPosition` on the client.
+    *   Added explicit throttling: clients only emit `location-update` if they have moved > 20 meters or if > 15 seconds have passed since the last emit.
+    *   Used Leaflet's `<Tooltip>` (hover) for user markers instead of `<Popup>` (click) to ensure glanceability.
+    *   Explicitly omitted `medical_notes` from the socket broadcast via `stripSensitiveData` in `db.ts`, enforcing server-side privacy boundaries.
+*   **Reasoning**: Strict distance/time throttling prevents the socket server from being flooded by GPS ticks (which can fire every second). Hover tooltips reduce friction when a coordinator needs to quickly scan the map to see who is where. Excluding medical notes ensures no sensitive data is leaked to unauthorized clients.

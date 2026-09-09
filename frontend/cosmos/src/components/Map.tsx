@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents , Tooltip} from 'react-leaflet'
 import { useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
@@ -7,7 +7,8 @@ import { RequestModal } from './RequestModal'
 import { RequestListPanel } from './RequestListPanel'
 import { RequestCard } from './RequestCard'
 import { ResourceCard } from './ResourceCard'
-import type { DisasterRequest, ResourceAggregator } from '../../../../backend/src/shared/types'
+import type { DisasterRequest, ResourceAggregator, PublicUser } from '../../../../backend/src/shared/types'
+import { calculateDistance, getRelativeTime } from '../utils'
 
 // Fix Leaflet's default marker icons breaking under Vite bundling
 import iconUrl from 'leaflet/dist/images/marker-icon.png'
@@ -51,6 +52,15 @@ const createResourceIcon = (status: string) => {
     });
 };
 
+const createUserIcon = () => {
+    return L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div style="background-color: #10b981; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+    });
+};
+
 function MapEventsHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
     useMapEvents({
         click(e) {
@@ -65,6 +75,8 @@ export function Map() {
     const [requests, setRequests] = useState<DisasterRequest[]>([])
     const [resources, setResources] = useState<ResourceAggregator[]>([])
     const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
+    const [users, setUsers] = useState<PublicUser[]>([])
+    const lastLocationSent = useRef<{time: number, lat: number, lng: number} | null>(null)
     
     // UI states
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -86,12 +98,43 @@ export function Map() {
     const userId = localStorage.getItem('chat-userid') || ''
 
     useEffect(() => {
-        if ('geolocation' in navigator) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        let watchId: number | null = null;
+        
+        console.log('[Geolocation] isSecureContext:', window.isSecureContext);
+        console.log('[Geolocation] navigator.geolocation exists:', 'geolocation' in navigator);
+        
+        if (!window.isSecureContext) {
+            console.warn("Geolocation requires HTTPS on non-localhost origins. It will silently fail or be unavailable on plain HTTP LAN connections.");
+        }
+
+        if ('geolocation' in navigator && window.isSecureContext) {
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    setUserLocation({ lat: latitude, lng: longitude });
+
+                    const now = Date.now();
+                    const last = lastLocationSent.current;
+                    let shouldSend = false;
+
+                    if (!last) {
+                        shouldSend = true;
+                    } else {
+                        const timeDiff = now - last.time;
+                        const dist = calculateDistance(last.lat, last.lng, latitude, longitude);
+                        if (timeDiff > 15000 || dist > 20) {
+                            shouldSend = true;
+                        }
+                    }
+
+                    if (shouldSend) {
+                        socket.emit('location-update', { lat: latitude, lng: longitude });
+                        lastLocationSent.current = { time: now, lat: latitude, lng: longitude };
+                    }
+                },
                 (err) => console.warn('Geolocation error:', err),
-                { timeout: 10000, enableHighAccuracy: true }
-            )
+                { timeout: 10000, enableHighAccuracy: true, maximumAge: 5000 }
+            );
         }
 
         if (!socket.connected) {
@@ -107,12 +150,22 @@ export function Map() {
 
         socket.on('resources-history', (history: ResourceAggregator[]) => setResources(history))
         socket.on('resource-updated', (res: ResourceAggregator) => setResources(prev => prev.map(p => p.id === res.id ? res : p)))
+        
+        socket.on('users-history', (history: PublicUser[]) => setUsers(history))
+        socket.on('user-updated', (user: PublicUser) => {
+            setUsers(prev => prev.some(u => u.id === user.id) 
+                ? prev.map(u => u.id === user.id ? user : u) 
+                : [...prev, user]
+            )
+        })
 
         socket.emit('request-pins-history')
         socket.emit('request-requests-history')
         socket.emit('request-resources')
+        socket.emit('request-users-history')
 
         return () => {
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
             socket.off('pins-history')
             socket.off('pin-added')
             socket.off('requests-history')
@@ -120,6 +173,8 @@ export function Map() {
             socket.off('request-updated')
             socket.off('resources-history')
             socket.off('resource-updated')
+            socket.off('users-history')
+            socket.off('user-updated')
         }
     }, [username, userId])
 
@@ -198,6 +253,26 @@ export function Map() {
                         <Popup minWidth={340} className="!p-0 !m-0 !bg-transparent !border-none !shadow-none">
                             <ResourceCard resource={res} userLocation={userLocation} />
                         </Popup>
+                    </Marker>
+                ))}
+
+                {/* Users */}
+                {users.filter(u => u.is_online && u.lat !== null && u.lng !== null && u.id !== userId).map(user => (
+                    <Marker key={user.id} position={[user.lat!, user.lng!]} icon={createUserIcon()}>
+                        <Tooltip direction="top" offset={[0, -10]} className="user-tooltip opacity-100 bg-white/90 backdrop-blur-sm border-slate-200 shadow-md p-2 rounded-lg">
+                            <div className="text-center font-sans min-w-[80px]">
+                                <div className="font-bold text-sm text-slate-800">{user.name}</div>
+                                <div className="text-[10px] text-slate-500 capitalize">{user.role}</div>
+                                {user.status && user.status !== 'unknown' && (
+                                    <div className="text-[9px] mt-1 font-semibold uppercase px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700">
+                                        {user.status.replace('_', ' ')}
+                                    </div>
+                                )}
+                                <div className="text-[9px] text-slate-400 mt-1 whitespace-nowrap">
+                                    Seen {getRelativeTime(user.last_seen)}
+                                </div>
+                            </div>
+                        </Tooltip>
                     </Marker>
                 ))}
             </MapContainer>
@@ -304,6 +379,10 @@ export function Map() {
                             <div className="flex items-center gap-2 mb-1.5"><div className="w-3 h-3 bg-blue-600 rounded-sm border border-slate-300"></div> OPEN</div>
                             <div className="flex items-center gap-2 mb-1.5"><div className="w-3 h-3 bg-amber-500 rounded-sm border border-slate-300"></div> LIMITED</div>
                             <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-600 rounded-sm border border-slate-300"></div> CLOSED</div>
+                        </div>
+                        <div>
+                            <p className="font-bold mb-2 mt-3">Users</p>
+                            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-emerald-500 border border-slate-300"></div> CONNECTED</div>
                         </div>
                     </div>
                 )}

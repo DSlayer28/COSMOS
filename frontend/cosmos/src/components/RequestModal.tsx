@@ -26,7 +26,7 @@ export function RequestModal({ isOpen, onClose, lat, lng, initialCategory }: Req
     const [category, setCategory] = useState<RequestCategory | null>(initialCategory || null);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [peopleAffected, setPeopleAffected] = useState(1);
+    const [peopleAffected, setPeopleAffected] = useState<number | ''>(1);
     const [expiryHours, setExpiryHours] = useState<number>(24);
     const [error, setError] = useState('');
 
@@ -53,7 +53,7 @@ export function RequestModal({ isOpen, onClose, lat, lng, initialCategory }: Req
             category,
             title,
             description,
-            peopleAffected,
+            peopleAffected: Number(peopleAffected) || 1,
             lat,
             lng,
             expiresAt: Date.now() + (expiryHours * 60 * 60 * 1000)
@@ -127,7 +127,10 @@ export function RequestModal({ isOpen, onClose, lat, lng, initialCategory }: Req
                                 min="1"
                                 className="w-full bg-slate-800 border border-white/10 rounded-lg p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-[#FFFDD0]/50"
                                 value={peopleAffected}
-                                onChange={(e) => setPeopleAffected(parseInt(e.target.value) || 1)}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    setPeopleAffected(isNaN(val) ? '' : val);
+                                }}
                             />
                         </div>
                         <div className="flex-1">

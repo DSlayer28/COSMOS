@@ -356,6 +356,8 @@ All payloads are plain JSON. The server uses the default Socket.io namespace (`/
 | request-requests-history | (none)                                        | Pull full requests array            |
 | create-request           | `Partial<DisasterRequest>`                    | Create a new disaster request       |
 | update-request           | `{ id: string, updates: Partial<...> }`       | Modify an existing request          |
+| location-update          | `{ lat: number, lng: number }`                | Send live geolocation tracking      |
+| request-users-history    | (none)                                        | Pull full users array from server   |
 
 ### Server -> Client Events
 
@@ -368,6 +370,8 @@ All payloads are plain JSON. The server uses the default Socket.io namespace (`/
 | requests-history| DisasterRequest[]| Requesting client only | Full requests array on connect or request     |
 | request-created | DisasterRequest  | ALL clients            | A new request has been added                  |
 | request-updated | DisasterRequest  | ALL clients            | An existing request has been updated          |
+| users-history   | PublicUser[]     | Requesting client only | Full users array on connect or request        |
+| user-updated    | PublicUser       | ALL clients            | An existing user updated location/status      |
 
 > NOTE: Chat uses `socket.broadcast.emit` (excludes sender) because the sender adds the message locally via optimistic update. Pins use `io.emit` (all clients) because Map has no local optimistic update.
 

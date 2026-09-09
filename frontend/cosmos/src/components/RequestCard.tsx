@@ -14,11 +14,12 @@ export function RequestCard({ request, currentUserId, resources, onClose }: Requ
     const isStale = (Date.now() - request.createdAt) >= 60 * 60 * 1000 && request.status !== 'resolved' && request.status !== 'cancelled' && request.status !== 'expired';
     
     const handleAcknowledge = () => {
-        socket.emit('update-request', { id: request.id, updates: { status: 'acknowledged' } });
+        const responders = [...new Set([...(request.responders || []), currentUserId])];
+        socket.emit('update-request', { id: request.id, updates: { status: 'acknowledged', responders } });
     };
 
     const handleHelp = () => {
-        const responders = [...new Set([...request.responders, currentUserId])];
+        const responders = [...new Set([...(request.responders || []), currentUserId])];
         socket.emit('update-request', { id: request.id, updates: { status: 'in_progress', responders } });
     };
 
@@ -127,6 +128,12 @@ export function RequestCard({ request, currentUserId, resources, onClose }: Requ
             {request.escalationCount > 0 && (
                 <div className="text-xs text-red-400 font-medium">
                     Escalated {request.escalationCount} time(s)
+                </div>
+            )}
+            
+            {request.responders && request.responders.length > 0 && (
+                <div className="text-xs text-emerald-400 font-medium">
+                    ✓ {request.responders.length === 1 ? '1 responder is on the way' : `${request.responders.length} responders are on the way`}
                 </div>
             )}
 

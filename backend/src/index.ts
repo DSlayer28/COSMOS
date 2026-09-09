@@ -6,7 +6,7 @@ import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { initDb, upsertUser, updateLocation, updateStatus, setOnlineStatus, getAllUsers, getPublicUser, getUser, UserStatus } from './db'
+import { initDb, upsertUser, updateLocation, updateStatus, setOnlineStatus, getAllUsers, getPublicUser, getUser } from './db'
 
 // Extend socket type to allow custom userName and userId property
 declare module 'socket.io' {
@@ -16,7 +16,7 @@ declare module 'socket.io' {
     }
 }
 
-import { DisasterRequest, RequestCategory, PriorityLevel, RequestStatus, ResourceAggregator, ResourceStatus, ChatMessage, ChatAttachment } from './shared/types'
+import { DisasterRequest, RequestCategory, PriorityLevel, RequestStatus, ResourceAggregator, ResourceStatus, ChatMessage, ChatAttachment, UserStatus } from './shared/types'
 
 type Pin = { id: string; lat: number; lng: number; label: string; name: string; timestamp: number }
 

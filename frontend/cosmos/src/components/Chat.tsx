@@ -24,7 +24,7 @@ export function Chat() {
     useEffect(() => {
         if (!username) return  // don't connect until user has joined
 
-        socket.io.opts.query = { name: username }
+        socket.io.opts.query = { name: username, id: userId }
 
         const onConnect = () => setConnected(true)
         const onDisconnect = () => setConnected(false)
@@ -48,7 +48,17 @@ export function Chat() {
         socket.on('server-message', onServerMessage)
         
         socket.on('requests-history', (history: DisasterRequest[]) => setRequests(history))
-        socket.on('request-created', (req: DisasterRequest) => setRequests(prev => [...prev, req]))
+        socket.on('request-created', (req: DisasterRequest) => {
+            setRequests(prev => [...prev, req])
+            setMessages(prev => [...prev, {
+                id: `req-alert-${req.id}`,
+                name: 'Emergency System',
+                message: '',
+                timestamp: req.createdAt,
+                attachment: { type: 'request', id: req.id },
+                self: false
+            }])
+        })
         socket.on('request-updated', (req: DisasterRequest) => setRequests(prev => prev.map(p => p.id === req.id ? req : p)))
 
         socket.on('resources-history', (history: ResourceAggregator[]) => setResources(history))
@@ -196,7 +206,7 @@ export function Chat() {
                         </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                        {resources.filter(r => r.status === 'OPEN' || r.status === 'LIMITED').map(res => (
+                        {resources.map(res => (
                             <div key={res.id} className="relative group">
                                 <ResourceCard resource={res} />
                                 <button 
@@ -211,7 +221,7 @@ export function Chat() {
                                 </button>
                             </div>
                         ))}
-                        {resources.filter(r => r.status === 'OPEN' || r.status === 'LIMITED').length === 0 && (
+                        {resources.length === 0 && (
                             <div className="text-center text-slate-500 text-xs mt-10">No resources available.</div>
                         )}
                     </div>

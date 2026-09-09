@@ -1,5 +1,24 @@
 export type PriorityLevel = 1 | 2 | 3 | 4 | 5;
 
+export type UserStatus = 'unknown' | 'safe' | 'need_help' | 'emergency';
+export type UserRole = 'civilian' | 'responder' | 'coordinator';
+
+export interface User {
+    id: string;
+    name: string;
+    lat: number | null;
+    lng: number | null;
+    status: UserStatus;
+    role: UserRole;
+    medical_notes?: string | null;
+    is_online: boolean;
+    last_seen: number;
+    created_at: number;
+    updated_at: number;
+}
+
+export type PublicUser = Omit<User, 'medical_notes'>;
+
 export type RequestCategory = 
     | 'medical' 
     | 'rescue' 
