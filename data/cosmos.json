@@ -116,6 +116,32 @@
       "last_seen": 1788433936019,
       "created_at": 1788432721241,
       "updated_at": 1788433936019
+    },
+    "66629890-130b-48df-b2f5-f501698d62b8": {
+      "id": "66629890-130b-48df-b2f5-f501698d62b8",
+      "name": "system",
+      "lat": null,
+      "lng": null,
+      "status": "unknown",
+      "role": "civilian",
+      "medical_notes": null,
+      "is_online": true,
+      "last_seen": 1789976250325,
+      "created_at": 1789973379883,
+      "updated_at": 1789976250325
+    },
+    "5c7221fc-b3c9-4343-8b79-1ac54675b06b": {
+      "id": "5c7221fc-b3c9-4343-8b79-1ac54675b06b",
+      "name": "Mobile",
+      "lat": null,
+      "lng": null,
+      "status": "unknown",
+      "role": "civilian",
+      "medical_notes": null,
+      "is_online": false,
+      "last_seen": 1789976712618,
+      "created_at": 1789973479751,
+      "updated_at": 1789976712618
     }
   }
 }

@@ -9,8 +9,22 @@ interface ResourceCardProps {
     onClose?: () => void;
 }
 
+const STATUS_CONFIG: Record<ResourceStatus, { color: string; dot: string; label: string }> = {
+    OPEN:    { color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25', dot: 'bg-emerald-400', label: 'Open' },
+    LIMITED: { color: 'bg-amber-500/15 text-amber-300 border-amber-500/25',       dot: 'bg-amber-400',   label: 'Limited' },
+    CLOSED:  { color: 'bg-red-500/15 text-red-300 border-red-500/25',             dot: 'bg-red-400',     label: 'Closed' },
+    UNKNOWN: { color: 'bg-slate-700/40 text-slate-400 border-slate-600/30',        dot: 'bg-slate-500',   label: 'Unknown' },
+};
+
+const SERVICE_COLOR: Record<string, string> = {
+    available:   'text-emerald-400',
+    limited:     'text-amber-400',
+    unavailable: 'text-red-400',
+};
+
 export function ResourceCard({ resource, userLocation, onClose }: ResourceCardProps) {
     const [isUpdating, setIsUpdating] = useState(false);
+    const statusCfg = STATUS_CONFIG[resource.status];
 
     const handleStatusUpdate = (status: ResourceStatus) => {
         setIsUpdating(true);
@@ -18,106 +32,96 @@ export function ResourceCard({ resource, userLocation, onClose }: ResourceCardPr
         setTimeout(() => setIsUpdating(false), 500);
     };
 
-    const getStatusColor = (status: ResourceStatus) => {
-        switch (status) {
-            case 'OPEN': return 'bg-green-500/20 text-green-300 border-green-500/30';
-            case 'LIMITED': return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-            case 'CLOSED': return 'bg-red-500/20 text-red-300 border-red-500/30';
-            case 'UNKNOWN': default: return 'bg-slate-700 text-slate-300 border-slate-600';
-        }
-    };
-
-    const getServiceColor = (availability: string) => {
-        switch (availability) {
-            case 'available': return 'text-green-400';
-            case 'limited': return 'text-amber-400';
-            case 'unavailable': return 'text-red-400';
-            default: return 'text-slate-400';
-        }
-    };
-
-    const distanceMeters = userLocation ? calculateDistance(userLocation.lat, userLocation.lng, resource.lat, resource.lng) : null;
+    const distanceMeters = userLocation
+        ? calculateDistance(userLocation.lat, userLocation.lng, resource.lat, resource.lng)
+        : null;
 
     return (
-        <div className="bg-slate-900 border border-white/10 rounded-xl p-4 shadow-lg w-full max-w-sm flex flex-col gap-3">
-            {onClose && (
-                <div className="flex justify-end -mt-2 -mr-2">
-                    <button 
-                        onClick={onClose} 
-                        className="text-slate-400 hover:text-white p-2 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        aria-label="Close resource card"
-                    >
-                        &times;
-                    </button>
-                </div>
-            )}
-            
-            <div className="flex justify-between items-start">
-                <div className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-blue-600 text-white">
-                    {resource.type.replace('_', ' ')}
-                </div>
-                <div className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getStatusColor(resource.status)} uppercase tracking-wider`}>
-                    {resource.status}
-                </div>
-            </div>
+        <div className="bg-slate-900 border border-white/[0.07] rounded-2xl overflow-hidden w-full max-w-sm shadow-xl">
+            {/* Status stripe */}
+            <div className={`h-0.5 w-full ${statusCfg.dot}`} />
 
-            <div>
-                <div className="flex justify-between items-start">
-                    <h3 className="text-white font-bold text-lg">{resource.name}</h3>
+            <div className="p-4 flex flex-col gap-3">
+                {/* Close */}
+                {onClose && (
+                    <div className="flex justify-end -mt-1 -mr-1">
+                        <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-slate-400 hover:text-white flex items-center justify-center text-lg font-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20" aria-label="Close">×</button>
+                    </div>
+                )}
+
+                {/* Type + Status badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 uppercase tracking-wide">
+                        {resource.type.replace(/_/g, ' ')}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusCfg.color}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
+                        {statusCfg.label}
+                    </span>
+                </div>
+
+                {/* Name + distance */}
+                <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-white font-bold text-base leading-snug flex-1">{resource.name}</h3>
                     {distanceMeters !== null && (
-                        <span className="text-slate-300 text-xs font-medium bg-slate-800 px-2 py-1 rounded">
+                        <span className="shrink-0 text-[11px] font-medium text-slate-400 bg-slate-800 px-2 py-1 rounded-lg whitespace-nowrap">
                             {formatDistance(distanceMeters)} away
                         </span>
                     )}
                 </div>
-                <p className="text-slate-400 text-xs mt-1">{resource.description}</p>
-            </div>
 
-            <div className="bg-slate-800/50 p-3 rounded-lg border border-white/5">
-                <h4 className="text-slate-300 text-xs font-semibold uppercase mb-2">Services</h4>
-                <div className="flex flex-col gap-1">
-                    {Object.entries(resource.services).map(([service, availability]) => (
-                        <div key={service} className="flex justify-between items-center text-xs">
-                            <span className="text-slate-400">{service}</span>
-                            <span className={`font-medium capitalize ${getServiceColor(availability)}`}>
-                                {availability}
-                            </span>
-                        </div>
-                    ))}
-                    {Object.keys(resource.services).length === 0 && (
-                        <div className="text-slate-500 text-xs italic">No services listed</div>
-                    )}
-                </div>
-            </div>
-
-            <div className="flex flex-col gap-1 text-xs text-slate-500 mt-1">
-                {resource.lastVerifiedAt > 0 ? (
-                    <span>Last verified {getRelativeTime(resource.lastVerifiedAt)}</span>
-                ) : (
-                    <span>Not verified yet</span>
+                {resource.description && (
+                    <p className="text-slate-500 text-xs leading-relaxed">{resource.description}</p>
                 )}
-            </div>
-            
-            <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-white/5">
-                <span className="w-full text-xs text-slate-400 font-medium mb-1">Update Status:</span>
-                <button 
-                    disabled={isUpdating || resource.status === 'OPEN'}
-                    onClick={() => handleStatusUpdate('OPEN')} 
-                    className="flex-1 bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed py-1.5 rounded text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500">
-                    OPEN
-                </button>
-                <button 
-                    disabled={isUpdating || resource.status === 'LIMITED'}
-                    onClick={() => handleStatusUpdate('LIMITED')} 
-                    className="flex-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed py-1.5 rounded text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
-                    LIMITED
-                </button>
-                <button 
-                    disabled={isUpdating || resource.status === 'CLOSED'}
-                    onClick={() => handleStatusUpdate('CLOSED')} 
-                    className="flex-1 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed py-1.5 rounded text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-                    CLOSED
-                </button>
+
+                {/* Services */}
+                {Object.keys(resource.services).length > 0 && (
+                    <div className="bg-slate-800/40 border border-white/[0.04] rounded-xl p-3">
+                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Services</h4>
+                        <div className="space-y-1.5">
+                            {Object.entries(resource.services).map(([service, availability]) => (
+                                <div key={service} className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-400 capitalize">{service}</span>
+                                    <span className={`font-semibold capitalize ${SERVICE_COLOR[availability] ?? 'text-slate-500'}`}>
+                                        {availability}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Verification */}
+                <div className="text-[10px] text-slate-600">
+                    {resource.lastVerifiedAt > 0
+                        ? `Verified ${getRelativeTime(resource.lastVerifiedAt)}`
+                        : 'Not yet verified'}
+                </div>
+
+                {/* Status update */}
+                <div className="pt-1 border-t border-white/[0.04]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-2">Update Status</p>
+                    <div className="grid grid-cols-3 gap-2">
+                        {(['OPEN', 'LIMITED', 'CLOSED'] as ResourceStatus[]).map(s => {
+                            const cfg = STATUS_CONFIG[s];
+                            const isActive = resource.status === s;
+                            return (
+                                <button
+                                    key={s}
+                                    disabled={isUpdating || isActive}
+                                    onClick={() => handleStatusUpdate(s)}
+                                    className={`py-1.5 rounded-xl text-[10px] font-bold uppercase transition-all border focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed ${
+                                        isActive
+                                            ? `${cfg.color} opacity-100`
+                                            : `bg-white/[0.03] text-slate-500 border-white/[0.05] hover:border-white/10 hover:text-slate-300`
+                                    } ${isUpdating ? 'opacity-50' : ''}`}
+                                >
+                                    {cfg.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
         </div>
     );

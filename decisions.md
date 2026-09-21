@@ -136,3 +136,29 @@ This document tracks all meaningful technical decisions, architecture choices, a
     *   Used Leaflet's `<Tooltip>` (hover) for user markers instead of `<Popup>` (click) to ensure glanceability.
     *   Explicitly omitted `medical_notes` from the socket broadcast via `stripSensitiveData` in `db.ts`, enforcing server-side privacy boundaries.
 *   **Reasoning**: Strict distance/time throttling prevents the socket server from being flooded by GPS ticks (which can fire every second). Hover tooltips reduce friction when a coordinator needs to quickly scan the map to see who is where. Excluding medical notes ensures no sensitive data is leaked to unauthorized clients.
+
+### [Feature: Global Username Prompt] - 2026-09-21
+
+*   **Context/Problem**: The username prompt was originally only shown when joining the Chat room, but the name is required globally for attributing map pins and disaster requests to the correct user.
+*   **Decision**: 
+    *   Created a new `UsernamePrompt.tsx` component based on the Chat's join screen UI.
+    *   Moved the join logic to `App.tsx` to conditionally render `UsernamePrompt` if `localStorage.getItem('chat-username')` is falsy, gating the entire application.
+    *   Updated `App.tsx` to manually disconnect and reconnect the global socket with the new username once provided, ensuring the backend sets `socket.userName` correctly.
+    *   Removed the redundant Join Screen from `Chat.tsx`.
+*   **Reasoning**: Gating the app at the router level ensures no components (like the Map or Dashboard) can be accessed anonymously. Reconnecting the socket immediately after the name is set guarantees that any subsequent events (like `create-request` or `add-pin`) correctly attribute the action to the user on the backend.
+
+### [Feature: Full UI/UX Overhaul] - 2026-09-21
+
+*   **Context/Problem**: The application UI was functional but lacked visual polish, had inconsistent styling across components, and needed full responsiveness across screen sizes.
+*   **Decision**:
+    *   **Typography**: Added Inter (Google Fonts) via `index.html` `<link>` for a premium, consistent typeface. Loaded via `<link>` rather than CSS `@import` for better performance.
+    *   **Design Tokens**: Expanded `index.css` with a comprehensive token set (glow colors, glass variables, bg layers) and custom `@keyframes` (fade-in, slide-up, float, pulse-ring, glow-pulse) with stagger utility classes.
+    *   **Glassmorphism**: All panels, cards, and overlays use `backdrop-blur` + low-opacity rgba backgrounds + faint white borders for a consistent premium frosted glass aesthetic.
+    *   **Cosmic Theme**: Dashboard and UsernamePrompt feature multi-layer background orbs and gradient overlays matching the COSMOS brand identity.
+    *   **Status Stripes**: RequestCard and ResourceCard have a 2px colored top stripe for immediate visual scanning of priority/status.
+    *   **User Avatars**: Per-user HSL color derived from username `charCodeAt(0)` for identity in chat and on the map.
+    *   **RequestModal**: Redesigned as a bottom sheet on mobile and a centered modal on desktop for better touch usability.
+    *   **Map**: Added a back-to-Dashboard button, refined glass overlays for the search bar and filter panel, filter pills replacing dropdowns, and a popup legend.
+    *   **AlertBanner**: Smooth slide-in/out CSS transition with a dismiss button, requester info, and gradient dark-red background.
+    *   **RequestListPanel**: Added a blurred backdrop overlay, critical count badge, and inline sort pill buttons.
+*   **Reasoning**: A consistent design language across all components reduces cognitive load in high-stress disaster scenarios. The cosmic aesthetic is cohesive with the COSMOS brand name and creates a strong first impression. Bottom sheet modals on mobile significantly improve one-handed usability on phones in field conditions.

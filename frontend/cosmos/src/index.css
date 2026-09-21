@@ -1,18 +1,36 @@
 @import "tailwindcss";
 
-/* Design tokens */
+/* ─── Google Fonts ─────────────────────────────────────── */
+/* Inter loaded via index.html <link> for performance */
+
+/* ─── Design Tokens ─────────────────────────────────────── */
 :root {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
+  /* Base */
+  --bg-primary: #020617;
+  --bg-secondary: #0f172a;
+  --bg-surface: #1e293b;
+
+  /* Text */
   --text-primary: #f8fafc;
   --text-muted: #94a3b8;
-  --accent-purple: #8b5cf6;
-  --accent-purple-hover: #7c3aed;
+  --text-dim: #475569;
+
+  /* Accent — COSMOS Cream (primary CTA) */
+  --cream: #FFFDD0;
+  --cream-dim: rgba(255, 253, 208, 0.12);
+
+  /* Brand glow colors */
+  --glow-indigo: rgba(99, 102, 241, 0.15);
+  --glow-violet: rgba(139, 92, 246, 0.12);
+  --glow-rose: rgba(225, 29, 72, 0.15);
+
+  /* Glass */
+  --glass-bg: rgba(15, 23, 42, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-border-hover: rgba(255, 255, 255, 0.12);
 }
 
-/* Must be inside @layer base so Tailwind utility classes (text-white, etc.)
-   can override these defaults. Without this, unlayered CSS always wins
-   over Tailwind's layered utilities. */
+/* ─── Base Reset ─────────────────────────────────────────── */
 @layer base {
   * {
     box-sizing: border-box;
@@ -22,10 +40,148 @@
 
   html, body, #root {
     width: 100%;
-    height: 100%;
+    min-height: 100%;
     background-color: var(--bg-primary);
     color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* ─── Animation Keyframes ────────────────────────────────── */
+@keyframes cosmos-fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cosmos-slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cosmos-slide-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes cosmos-slide-out-right {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+
+@keyframes cosmos-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+  70%  { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+@keyframes cosmos-glow-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
+@keyframes cosmos-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes alert-slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ─── Utility Animation Classes ─────────────────────────── */
+.cosmos-fade-in       { animation: cosmos-fade-in 0.4s ease both; }
+.cosmos-slide-up      { animation: cosmos-slide-up 0.5s ease both; }
+.cosmos-float         { animation: cosmos-float 4s ease-in-out infinite; }
+.cosmos-pulse-ring    { animation: cosmos-pulse-ring 2s ease-out infinite; }
+.cosmos-glow-pulse    { animation: cosmos-glow-pulse 3s ease-in-out infinite; }
+
+/* Staggered children */
+.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.10s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.20s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.30s; }
+
+/* ─── Glassmorphism Utilities ────────────────────────────── */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-hover:hover {
+  border-color: var(--glass-border-hover);
+  background: rgba(30, 41, 59, 0.85);
+}
+
+/* ─── Leaflet Overrides ──────────────────────────────────── */
+.leaflet-container {
+  background: #0f172a;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Custom pin tooltip */
+.pin-tooltip {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+.pin-tooltip::before {
+  border-top-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* User location tooltip */
+.user-tooltip {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4) !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Leaflet popup overrides */
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+}
+.leaflet-popup-tip-container { display: none !important; }
+.leaflet-popup-close-button  { display: none !important; }
+
+/* ─── Alert Banner ───────────────────────────────────────── */
+.cosmos-alert-banner {
+  animation: alert-slide-down 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }

@@ -1,6 +1,6 @@
 import type { DisasterRequest, RequestStatus, ResourceAggregator } from '../../../../backend/src/shared/types';
 import { socket } from '../socket';
-import { getRelativeTime, formatPriority, calculateDistance, formatDistance, CATEGORY_RESOURCE_MAP } from '../utils';
+import { getRelativeTime, calculateDistance, formatDistance, CATEGORY_RESOURCE_MAP } from '../utils';
 
 interface RequestCardProps {
     request: DisasterRequest;
@@ -9,197 +9,177 @@ interface RequestCardProps {
     onClose?: () => void;
 }
 
+const PRIORITY_CONFIG = {
+    1: { label: 'Critical', color: 'bg-red-500/20 text-red-300 border-red-500/30', dot: 'bg-red-500', glow: 'shadow-red-500/20' },
+    2: { label: 'Urgent',   color: 'bg-orange-500/20 text-orange-300 border-orange-500/30', dot: 'bg-orange-500', glow: 'shadow-orange-500/20' },
+    3: { label: 'High',     color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', dot: 'bg-amber-500', glow: 'shadow-amber-500/20' },
+    4: { label: 'Medium',   color: 'bg-slate-600/20 text-slate-300 border-slate-600/30', dot: 'bg-slate-400', glow: '' },
+    5: { label: 'Low',      color: 'bg-slate-700/20 text-slate-400 border-slate-700/30', dot: 'bg-slate-500', glow: '' },
+} as const;
+
+const STATUS_CONFIG: Record<RequestStatus, { color: string; label: string }> = {
+    open:         { color: 'bg-slate-700/60 text-slate-300 border-slate-600/40',        label: 'Open' },
+    acknowledged: { color: 'bg-blue-500/15 text-blue-300 border-blue-500/25',           label: 'Acknowledged' },
+    in_progress:  { color: 'bg-amber-500/15 text-amber-300 border-amber-500/25',        label: 'In Progress' },
+    resolved:     { color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',  label: 'Resolved' },
+    cancelled:    { color: 'bg-red-500/15 text-red-300 border-red-500/25',              label: 'Cancelled' },
+    expired:      { color: 'bg-slate-800/60 text-slate-500 border-slate-700/40',        label: 'Expired' },
+};
+
 export function RequestCard({ request, currentUserId, resources, onClose }: RequestCardProps) {
     const isRequester = request.requesterId === currentUserId;
     const isStale = (Date.now() - request.createdAt) >= 60 * 60 * 1000 && request.status !== 'resolved' && request.status !== 'cancelled' && request.status !== 'expired';
-    
-    const handleAcknowledge = () => {
-        const responders = [...new Set([...(request.responders || []), currentUserId])];
-        socket.emit('update-request', { id: request.id, updates: { status: 'acknowledged', responders } });
-    };
+    const priority = PRIORITY_CONFIG[request.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG[5];
+    const status = STATUS_CONFIG[request.status];
 
-    const handleHelp = () => {
-        const responders = [...new Set([...(request.responders || []), currentUserId])];
-        socket.emit('update-request', { id: request.id, updates: { status: 'in_progress', responders } });
-    };
+    const handleAcknowledge = () => socket.emit('update-request', { id: request.id, updates: { status: 'acknowledged', responders: [...new Set([...(request.responders || []), currentUserId])] } });
+    const handleHelp      = () => socket.emit('update-request', { id: request.id, updates: { status: 'in_progress', responders: [...new Set([...(request.responders || []), currentUserId])] } });
+    const handleResolve   = () => socket.emit('update-request', { id: request.id, updates: { status: 'resolved' } });
+    const handleCancel    = () => socket.emit('update-request', { id: request.id, updates: { status: 'cancelled' } });
+    const handleEscalate  = () => socket.emit('update-request', { id: request.id, updates: { lastEscalatedAt: Date.now() } });
+    const handleRenew     = () => socket.emit('update-request', { id: request.id, updates: { status: 'open', expiresAt: Date.now() + 24 * 60 * 60 * 1000 } });
 
-    const handleResolve = () => {
-        socket.emit('update-request', { id: request.id, updates: { status: 'resolved' } });
-    };
-
-    const handleCancel = () => {
-        socket.emit('update-request', { id: request.id, updates: { status: 'cancelled' } });
-    };
-
-    const handleEscalate = () => {
-        socket.emit('update-request', { id: request.id, updates: { lastEscalatedAt: Date.now() } });
-    };
-
-    const handleRenew = () => {
-        socket.emit('update-request', { id: request.id, updates: { status: 'open', expiresAt: Date.now() + 24 * 60 * 60 * 1000 } });
-    };
-
-    const getStatusColor = (status: RequestStatus) => {
-        switch (status) {
-            case 'open': return 'bg-slate-700 text-slate-300';
-            case 'acknowledged': return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-            case 'in_progress': return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-            case 'resolved': return 'bg-green-500/20 text-green-300 border-green-500/30';
-            case 'cancelled': return 'bg-red-500/20 text-red-300 border-red-500/30';
-            case 'expired': return 'bg-slate-800 text-slate-500 border-slate-700';
-            default: return 'bg-slate-700 text-slate-300';
-        }
-    };
-
-    const getPriorityColor = (p: number, status: RequestStatus) => {
-        if (status === 'expired') return 'bg-slate-700 text-slate-400';
-        if (p === 1) return 'bg-red-600 text-white';
-        if (p === 2) return 'bg-orange-500 text-white';
-        if (p === 3) return 'bg-amber-500 text-white';
-        return 'bg-slate-600 text-white';
-    };
-
-    // Calculate Nearby Help
+    // Nearby resources matching
     const relevantTypes = CATEGORY_RESOURCE_MAP[request.category] || [];
     const matchedResources = (resources || [])
         .filter(r => r.status !== 'CLOSED')
-        .map(r => {
-            const distance = calculateDistance(request.lat, request.lng, r.lat, r.lng);
-            const isRelevant = relevantTypes.includes(r.type);
-            const availabilityScore = r.status === 'OPEN' ? 1 : r.status === 'LIMITED' ? 2 : 3;
-            const relevanceScore = isRelevant ? 1 : 2;
-            
-            return { resource: r, distance, availabilityScore, relevanceScore };
-        })
+        .map(r => ({
+            resource: r,
+            distance: calculateDistance(request.lat, request.lng, r.lat, r.lng),
+            isRelevant: relevantTypes.includes(r.type),
+            availabilityScore: r.status === 'OPEN' ? 1 : r.status === 'LIMITED' ? 2 : 3,
+        }))
         .sort((a, b) => {
             if (a.availabilityScore !== b.availabilityScore) return a.availabilityScore - b.availabilityScore;
-            if (a.relevanceScore !== b.relevanceScore) return a.relevanceScore - b.relevanceScore;
-            if (a.distance !== b.distance) return a.distance - b.distance;
-            return b.resource.lastVerifiedAt - a.resource.lastVerifiedAt;
+            if (a.isRelevant !== b.isRelevant) return a.isRelevant ? -1 : 1;
+            return a.distance - b.distance;
         })
         .slice(0, 3);
 
     return (
-        <div className="bg-slate-900 border border-white/10 rounded-xl p-4 shadow-lg w-full max-w-sm flex flex-col gap-3">
-            {onClose && (
-                <div className="flex justify-end -mt-2 -mr-2">
-                    <button 
-                        onClick={onClose} 
-                        className="text-slate-400 hover:text-white p-2 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        aria-label="Close request card"
-                    >
-                        &times;
-                    </button>
-                </div>
-            )}
-            
-            <div className="flex justify-between items-start">
-                <div className="flex items-center gap-2">
-                    <div className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${getPriorityColor(request.priority, request.status)}`}>
-                        {formatPriority(request.priority)} Priority
+        <div className="bg-slate-900 border border-white/[0.07] rounded-2xl overflow-hidden w-full max-w-sm shadow-xl">
+            {/* Priority stripe at top */}
+            <div className={`h-0.5 w-full ${priority.dot}`} />
+
+            <div className="p-4 flex flex-col gap-3">
+                {/* Close button */}
+                {onClose && (
+                    <div className="flex justify-end -mt-1 -mr-1">
+                        <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-slate-400 hover:text-white flex items-center justify-center text-lg font-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20" aria-label="Close">×</button>
                     </div>
+                )}
+
+                {/* Badges row */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${priority.color}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${priority.dot}`} />
+                        {priority.label}
+                    </span>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${status.color}`}>
+                        {status.label}
+                    </span>
                     {isStale && (
-                        <div className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-purple-500/15 text-purple-300 border-purple-500/25">
                             Stale
-                        </div>
+                        </span>
                     )}
                 </div>
-                <div className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getStatusColor(request.status)} uppercase tracking-wider`}>
-                    {request.status.replace('_', ' ')}
+
+                {/* Title + meta */}
+                <div>
+                    <h3 className="text-white font-bold text-base leading-snug">{request.title}</h3>
+                    <p className="text-slate-500 text-[11px] mt-1 uppercase tracking-wide">
+                        {request.category} · {request.peopleAffected} person{request.peopleAffected !== 1 ? 's' : ''} affected
+                    </p>
                 </div>
-            </div>
 
-            <div>
-                <h3 className="text-white font-bold text-lg">{request.title}</h3>
-                <p className="text-slate-400 text-xs mt-1">
-                    {request.category.toUpperCase()} &bull; {request.peopleAffected} person(s) affected
-                </p>
-            </div>
-
-            <div className="bg-slate-800/50 p-3 rounded-lg border border-white/5">
-                <p className="text-slate-300 text-sm whitespace-pre-wrap">{request.description}</p>
-            </div>
-
-            <div className="flex justify-between items-center text-xs text-slate-500">
-                <span>Requested by <strong className="text-slate-300">{request.requesterName}</strong></span>
-                <span>{getRelativeTime(request.createdAt)}</span>
-            </div>
-            
-            {request.escalationCount > 0 && (
-                <div className="text-xs text-red-400 font-medium">
-                    Escalated {request.escalationCount} time(s)
+                {/* Description */}
+                <div className="bg-slate-800/50 border border-white/[0.04] rounded-xl px-3 py-2.5">
+                    <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{request.description}</p>
                 </div>
-            )}
-            
-            {request.responders && request.responders.length > 0 && (
-                <div className="text-xs text-emerald-400 font-medium">
-                    ✓ {request.responders.length === 1 ? '1 responder is on the way' : `${request.responders.length} responders are on the way`}
-                </div>
-            )}
 
-            {(request.status === 'open' || request.status === 'in_progress') && matchedResources.length > 0 && (
-                <div className="bg-slate-800/80 p-3 rounded-lg border border-blue-500/20 mt-1">
-                    <h4 className="text-slate-300 text-xs font-semibold uppercase mb-2 flex justify-between items-center">
-                        <span>Nearby Help</span>
-                        <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[10px]">{matchedResources.length} Found</span>
-                    </h4>
-                    <div className="flex flex-col gap-2">
-                        {matchedResources.map(m => (
-                            <div key={m.resource.id} className="flex justify-between items-center text-xs">
-                                <div>
-                                    <div className="text-white font-medium">{m.resource.name}</div>
-                                    <div className="text-slate-400 text-[10px] mt-0.5 flex gap-1 items-center">
-                                        <span className="uppercase">{m.resource.type.replace('_', ' ')}</span>
-                                        <span>&bull;</span>
-                                        <span className={m.resource.status === 'OPEN' ? 'text-green-400' : 'text-amber-400'}>{m.resource.status}</span>
-                                    </div>
-                                </div>
-                                <div className="text-slate-300 font-medium bg-slate-700 px-2 py-1 rounded">
-                                    {formatDistance(m.distance)}
-                                </div>
-                            </div>
-                        ))}
+                {/* Requester + time */}
+                <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">
+                        By <span className="text-slate-300 font-medium">{request.requesterName}</span>
+                    </span>
+                    <span className="text-slate-600">{getRelativeTime(request.createdAt)}</span>
+                </div>
+
+                {/* Escalation & responders */}
+                {request.escalationCount > 0 && (
+                    <div className="text-[11px] text-red-400 font-semibold flex items-center gap-1">
+                        <span>🔺</span> Escalated {request.escalationCount}×
                     </div>
-                </div>
-            )}
+                )}
+                {request.responders?.length > 0 && (
+                    <div className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                        <span>✓</span> {request.responders.length} responder{request.responders.length !== 1 ? 's' : ''} on the way
+                    </div>
+                )}
 
-            {request.status !== 'resolved' && request.status !== 'cancelled' && request.status !== 'expired' && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                    {!isRequester && request.status === 'open' && (
-                        <button onClick={handleAcknowledge} className="flex-1 bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                            Acknowledge
-                        </button>
-                    )}
-                    
-                    {!isRequester && request.status !== 'in_progress' && (
-                        <button onClick={handleHelp} className="flex-1 bg-[#FFFDD0] text-slate-900 hover:bg-white py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]">
-                            I Can Help
-                        </button>
-                    )}
+                {/* Nearby Help */}
+                {(request.status === 'open' || request.status === 'in_progress') && matchedResources.length > 0 && (
+                    <div className="bg-indigo-950/40 border border-indigo-500/20 rounded-xl p-3">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Nearby Help</h4>
+                            <span className="bg-indigo-500/20 text-indigo-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{matchedResources.length} found</span>
+                        </div>
+                        <div className="space-y-2">
+                            {matchedResources.map(m => (
+                                <div key={m.resource.id} className="flex justify-between items-center">
+                                    <div>
+                                        <div className="text-white text-xs font-medium">{m.resource.name}</div>
+                                        <div className="text-slate-500 text-[10px]">
+                                            {m.resource.type.replace('_', ' ')} ·{' '}
+                                            <span className={m.resource.status === 'OPEN' ? 'text-emerald-400' : 'text-amber-400'}>{m.resource.status}</span>
+                                        </div>
+                                    </div>
+                                    <span className="text-slate-400 text-[11px] font-medium bg-slate-800 px-2 py-0.5 rounded-lg">
+                                        {formatDistance(m.distance)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
-                    {isRequester && (
-                        <>
-                            <button onClick={handleEscalate} className="flex-1 bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-                                Still Need Help
+                {/* Action buttons */}
+                {request.status !== 'resolved' && request.status !== 'cancelled' && request.status !== 'expired' && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        {!isRequester && request.status === 'open' && (
+                            <button onClick={handleAcknowledge} className="flex-1 bg-blue-500/15 text-blue-300 border border-blue-500/25 hover:bg-blue-500/25 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50">
+                                Acknowledge
                             </button>
-                            <button onClick={handleResolve} className="flex-1 bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500">
-                                Resolve
+                        )}
+                        {!isRequester && request.status !== 'in_progress' && (
+                            <button onClick={handleHelp} className="flex-1 bg-[#FFFDD0] hover:bg-white text-slate-900 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]/50">
+                                I Can Help
                             </button>
-                            <button onClick={handleCancel} className="flex-1 bg-slate-800 text-slate-300 border border-white/10 hover:bg-slate-700 py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">
-                                Cancel
-                            </button>
-                        </>
-                    )}
-                </div>
-            )}
+                        )}
+                        {isRequester && (
+                            <>
+                                <button onClick={handleEscalate} className="flex-1 bg-red-500/15 text-red-300 border border-red-500/25 hover:bg-red-500/25 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50">
+                                    Still Need Help
+                                </button>
+                                <button onClick={handleResolve} className="flex-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50">
+                                    Resolve ✓
+                                </button>
+                                <button onClick={handleCancel} className="flex-1 bg-slate-800/60 text-slate-400 border border-white/[0.06] hover:bg-slate-700/60 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/50">
+                                    Cancel
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
 
-            {request.status === 'expired' && isRequester && (
-                <div className="mt-2">
-                    <button onClick={handleRenew} className="w-full bg-[#FFFDD0] text-slate-900 hover:bg-white py-2 rounded-lg text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]">
+                {/* Renew expired */}
+                {request.status === 'expired' && isRequester && (
+                    <button onClick={handleRenew} className="w-full bg-[#FFFDD0] hover:bg-white text-slate-900 py-2.5 rounded-xl text-xs font-bold transition-all hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]/50">
                         Renew Request (24h)
                     </button>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }
