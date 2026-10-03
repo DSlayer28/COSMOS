@@ -93,18 +93,24 @@ COSMOS_PROJECT_APP/
 `-- frontend/
     `-- cosmos/
         |-- src/
-        |   |-- main.tsx         # React entry point
-        |   |-- App.tsx          # Router definition (3 routes)
-        |   |-- socket.ts        # Singleton Socket.io client
-        |   |-- index.css        # Global styles + Tailwind + CSS tokens
-        |   |-- App.css          # Root element styles
+        |   |-- main.tsx              # React entry point
+        |   |-- App.tsx               # Router + UsernamePrompt gatekeeper
+        |   |-- socket.ts             # Singleton Socket.io client
+        |   |-- index.css             # Global styles, design tokens, animations
+        |   |-- App.css               # Root element styles
         |   `-- components/
-        |       |-- Dashboard.tsx  # Landing/home page
-        |       |-- Chat.tsx       # Real-time chat UI (~224 lines)
-        |       `-- Map.tsx        # Leaflet map with pin dropping
+        |       |-- UsernamePrompt.tsx  # Global name entry screen
+        |       |-- Dashboard.tsx       # Landing/home page with live stats
+        |       |-- Chat.tsx            # Real-time chat with resource drawer
+        |       |-- Map.tsx             # Leaflet map, requests & resources
+        |       |-- AlertBanner.tsx     # Critical emergency global alert
+        |       |-- RequestModal.tsx    # New request form (bottom sheet)
+        |       |-- RequestCard.tsx     # Request detail card with actions
+        |       |-- RequestListPanel.tsx# Slide-in needs-help panel
+        |       `-- ResourceCard.tsx    # Resource detail + status update card
         |-- public/
         |   `-- favicon.svg
-        |-- index.html           # HTML shell with #root mount point
+        |-- index.html           # HTML shell, Google Fonts, meta tags
         |-- vite.config.ts       # Vite config with React + Tailwind plugins
         |-- package.json
         `-- tsconfig.json
@@ -230,9 +236,10 @@ createRoot(document.getElementById('root')!).render(
 ```
 Also imports `leaflet/dist/leaflet.css` globally so Leaflet styles are available to all components.
 
-### 5.3 App.tsx — Router
+### 5.3 App.tsx — Router & Gatekeeper
 
-Three flat routes (no nested layouts):
+- Mounts the `<UsernamePrompt />` if the `chat-username` is not present in `localStorage`, effectively gating the entire application until the user identifies themselves.
+- Once the username is set, it reconnects the socket and renders three flat routes (no nested layouts):
 ```
 /        -> <Dashboard />
 /map     -> <Map />
@@ -261,16 +268,10 @@ export const socket = io({ query: { name }, autoConnect: true })
 **Local State:**
 | State       | Type        | Purpose                                             |
 |-------------|-------------|-----------------------------------------------------|
-| username    | string      | Read from localStorage. Controls which screen shows.|
-| joined      | boolean     | Guards join screen vs chat screen.                  |
-| inputName   | string      | Controlled input for name entry.                    |
+| username    | string      | Read from localStorage (guaranteed by App.tsx).     |
 | message     | string      | Controlled input for message typing.                |
 | messages    | Message[]   | Array of all messages to display.                   |
 | connected   | boolean     | Mirrors socket connection state for UI feedback.    |
-
-**Two-Screen Architecture:**
-- **Join Screen**: Shown when `!joined && !username`. User enters a name, clicks "Enter Chat".
-- **Chat Screen**: Full chat UI shown after joining.
 
 **useEffect — Socket Setup (re-runs when `username` changes):**
 - Short-circuits with `return` if `username` is empty.
@@ -282,12 +283,6 @@ export const socket = io({ query: { name }, autoConnect: true })
 
 **useEffect — Auto-scroll (re-runs when `messages` changes):**
 - Calls `bottomRef.current?.scrollIntoView({ behavior: 'smooth' })` after every update.
-
-**handleJoin():**
-1. Trims and validates `inputName`.
-2. Saves to `localStorage`.
-3. Adds local System message ("You joined as...").
-4. Sets `username` state — triggers the socket useEffect.
 
 **handleSend():**
 1. Validates text non-empty and socket connected.
@@ -493,12 +488,17 @@ Key points:
 ## 10. Styling & Design System
 
 - **Framework**: Tailwind CSS v4 via `@tailwindcss/vite` (no `tailwind.config.js` needed).
-- **Theme**: Dark mode. Base: `slate-950` (#020617). Surfaces: `slate-900`.
-- **Accent**: Cream (#FFFDD0) for primary actions, own chat bubbles, header labels.
-- **Borders**: Low-opacity white (`border-white/10`, `border-white/[0.06]`) — glassmorphism aesthetic.
-- **Effects**: `backdrop-blur-xl` on headers/input bars. `blur-3xl` on ambient glow decorators.
-- **Responsive**: Mobile-first with `sm:` breakpoint variants throughout.
-- **iOS Safe Area**: Chat input bar uses `pb-[max(0.625rem,env(safe-area-inset-bottom))]` for iPhone gesture bar clearance.
+- **Typography**: Inter (Google Fonts) loaded via `<link>` in `index.html` for performance. Fallback to system fonts.
+- **Theme**: Cosmic dark mode. Base: `#020617`. Surfaces: `slate-900/80` with `backdrop-blur`.
+- **Accent**: Cream (#FFFDD0) for all primary CTAs and own chat bubbles. Indigo/violet for brand identity.
+- **Glassmorphism**: `.glass` utility in `index.css` — `rgba` bg + `backdrop-filter: blur(20px)` + low-opacity borders.
+- **Animations**: Custom `@keyframes` defined in `index.css` — `cosmos-fade-in`, `cosmos-slide-up`, `cosmos-float`, `cosmos-pulse-ring`, `cosmos-glow-pulse`. Stagger utilities via `.stagger-children > *:nth-child(n)` delays.
+- **Status Stripes**: Cards (RequestCard, ResourceCard) have a 2px colored top stripe for instant priority/status scanning.
+- **Priority Badges**: Unified pill badges with colored bg, text, and border per priority/status level.
+- **User Avatars**: Chat avatars use `hsl(charCode * 15, 60%, 50%)` for per-user color identity. Map user icons use matching scheme.
+- **Responsive**: Mobile-first with `sm:` breakpoints. RequestModal becomes a bottom sheet on mobile.
+- **iOS Safe Area**: Chat input bar uses `pb-[max(12px,env(safe-area-inset-bottom))]` for iPhone gesture bar clearance.
+- **Leaflet Overrides**: Custom dark popup and tooltip styles in `index.css` to match the overall theme.
 
 ---
 

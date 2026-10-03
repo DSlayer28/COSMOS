@@ -21,11 +21,11 @@ This document maps out how execution travels through the COSMOS application, det
 
 ## 2. Frontend Startup
 1. **Entry Point (`frontend/cosmos/src/main.tsx`)**: React mounts into the `#root` DOM element and renders the `<App />` component.
-2. **Routing (`frontend/cosmos/src/App.tsx`)**: `App.tsx` sets up the `BrowserRouter` (React Router) with three main routes:
+2. **Routing (`frontend/cosmos/src/App.tsx`)**: `App.tsx` conditionally renders `<UsernamePrompt />` if `chat-username` is missing from `localStorage`. Once the username is provided, it sets up the `BrowserRouter` (React Router) with three main routes:
     - `/` -> `<Dashboard />`
     - `/map` -> `<Map />`
     - `/chat` -> `<Chat />`
-3. **Global Socket (`frontend/cosmos/src/socket.ts`)**: This module is evaluated when imported. It retrieves the username from `localStorage` and initializes a `socket.io-client` instance with `autoConnect: true`.
+3. **Global Socket (`frontend/cosmos/src/socket.ts`)**: This module is evaluated when imported. It retrieves the username from `localStorage` and initializes a `socket.io-client` instance with `autoConnect: true`. `App.tsx` ensures this connection is refreshed immediately if a new username is provided at startup.
 
 ## 3. Component Flows
 
@@ -34,8 +34,7 @@ This document maps out how execution travels through the COSMOS application, det
 - **Interaction**: Contains purely structural HTML/Tailwind and React Router `<Link>` components to navigate to the Map or Chat views. No socket interaction happens here.
 
 ### B. Chat Room (`<Chat />`)
-1. **State Initialization**: Reads `chat-username` from `localStorage`. If missing, the component renders a "Join Screen".
-2. **Join Flow**: User enters a name -> `handleJoin()` is called -> saves to `localStorage` -> updates state -> renders the "Chat Screen".
+1. **State Initialization**: Reads `chat-username` from `localStorage` (guaranteed by `<App />` to exist).
 3. **Socket Connection (`useEffect`)**:
     - Updates the socket query with the username.
     - Registers listeners for `connect`, `disconnect`, `chat-history`, and `server-message`.

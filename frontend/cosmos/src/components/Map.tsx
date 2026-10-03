@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents , Tooltip} from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Tooltip } from 'react-leaflet'
 import { useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import L from 'leaflet'
 import { socket } from '../socket'
 import { RequestModal } from './RequestModal'
@@ -25,47 +26,54 @@ type Pin = {
     timestamp: number
 }
 
+// Priority configs for request icons
+const PRIORITY_COLORS: Record<number, string> = {
+    1: '#ef4444', // red-500
+    2: '#f97316', // orange-500
+    3: '#f59e0b', // amber-500
+    4: '#6366f1', // indigo-500
+    5: '#475569', // slate-600
+}
+
 const createRequestIcon = (priority: number) => {
-    let color = '#475569'; // slate-600
-    if (priority === 1) color = '#dc2626'; // red-600
-    else if (priority === 2) color = '#f97316'; // orange-500
-    else if (priority === 3) color = '#f59e0b'; // amber-500
-    
+    const color = PRIORITY_COLORS[priority] ?? PRIORITY_COLORS[5]
     return L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
-    });
-};
+        className: '',
+        html: `<div style="position:relative;width:28px;height:28px">
+            <div style="position:absolute;inset:0;background:${color};border-radius:50%;opacity:0.25;animation:cosmos-glow-pulse 2s ease-in-out infinite;"></div>
+            <div style="position:absolute;inset:3px;background:${color};border-radius:50%;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 8px ${color}88;"></div>
+        </div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+    })
+}
 
 const createResourceIcon = (status: string) => {
-    let color = '#2563eb'; // blue-600
-    if (status === 'CLOSED') color = '#dc2626'; // red-600
-    else if (status === 'LIMITED') color = '#f59e0b'; // amber-500
-    
+    const color = status === 'CLOSED' ? '#ef4444' : status === 'LIMITED' ? '#f59e0b' : '#6366f1'
     return L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div style="background-color: ${color}; width: 22px; height: 22px; border-radius: 4px; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`,
+        className: '',
+        html: `<div style="width:22px;height:22px;background:${color};border-radius:5px;border:2px solid rgba(255,255,255,0.75);box-shadow:0 2px 8px ${color}88;"></div>`,
         iconSize: [22, 22],
-        iconAnchor: [11, 11]
-    });
-};
+        iconAnchor: [11, 11],
+    })
+}
 
-const createUserIcon = () => {
+const createUserIcon = (name: string) => {
+    const hue = name.charCodeAt(0) * 15 % 360
     return L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div style="background-color: #10b981; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-    });
-};
+        className: '',
+        html: `<div style="position:relative;width:20px;height:20px">
+            <div style="position:absolute;inset:-3px;border-radius:50%;border:2px solid hsl(${hue},60%,55%);opacity:0.4;animation:cosmos-pulse-ring 2s ease-out infinite;"></div>
+            <div style="position:absolute;inset:0;background:hsl(${hue},60%,50%);border-radius:50%;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>
+        </div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+    })
+}
 
 function MapEventsHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
     useMapEvents({
-        click(e) {
-            onMapClick(e.latlng.lat, e.latlng.lng);
-        },
+        click(e) { onMapClick(e.latlng.lat, e.latlng.lng) },
     })
     return null
 }
@@ -74,90 +82,75 @@ export function Map() {
     const [pins, setPins] = useState<Pin[]>([])
     const [requests, setRequests] = useState<DisasterRequest[]>([])
     const [resources, setResources] = useState<ResourceAggregator[]>([])
-    const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
+    const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null)
     const [users, setUsers] = useState<PublicUser[]>([])
-    const lastLocationSent = useRef<{time: number, lat: number, lng: number} | null>(null)
-    
+    const lastLocationSent = useRef<{ time: number, lat: number, lng: number } | null>(null)
+
     // UI states
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isPanelOpen, setIsPanelOpen] = useState(false)
-    const [isLegendOpen, setIsLegendOpen] = useState(true)
+    const [isLegendOpen, setIsLegendOpen] = useState(false)
     const [isFilterOpen, setIsFilterOpen] = useState(false)
-    const [clickCoords, setClickCoords] = useState<{lat: number, lng: number} | null>(null)
-    
-    // Filters and Search
+    const [clickCoords, setClickCoords] = useState<{ lat: number, lng: number } | null>(null)
+
+    // Filters
     const [globalSearch, setGlobalSearch] = useState('')
-    const [filterPriorities, setFilterPriorities] = useState<number[]>([1,2,3,4,5])
+    const [filterPriorities, setFilterPriorities] = useState<number[]>([1, 2, 3, 4, 5])
     const [filterCategories, setFilterCategories] = useState<string[]>([])
     const [filterResourceTypes, setFilterResourceTypes] = useState<string[]>([])
-    
+
     const [searchParams] = useSearchParams()
     const intent = searchParams.get('intent') as any || null
 
     const username = localStorage.getItem('chat-username') || 'Anonymous'
     const userId = localStorage.getItem('chat-userid') || ''
+    const hasActiveFilters = filterPriorities.length < 5 || filterCategories.length > 0 || filterResourceTypes.length > 0
 
     useEffect(() => {
-        let watchId: number | null = null;
-        
-        console.log('[Geolocation] isSecureContext:', window.isSecureContext);
-        console.log('[Geolocation] navigator.geolocation exists:', 'geolocation' in navigator);
-        
-        if (!window.isSecureContext) {
-            console.warn("Geolocation requires HTTPS on non-localhost origins. It will silently fail or be unavailable on plain HTTP LAN connections.");
-        }
+        let watchId: number | null = null
 
         if ('geolocation' in navigator && window.isSecureContext) {
             watchId = navigator.geolocation.watchPosition(
                 (pos) => {
-                    const { latitude, longitude } = pos.coords;
-                    setUserLocation({ lat: latitude, lng: longitude });
-
-                    const now = Date.now();
-                    const last = lastLocationSent.current;
-                    let shouldSend = false;
-
-                    if (!last) {
-                        shouldSend = true;
-                    } else {
-                        const timeDiff = now - last.time;
-                        const dist = calculateDistance(last.lat, last.lng, latitude, longitude);
-                        if (timeDiff > 15000 || dist > 20) {
-                            shouldSend = true;
-                        }
-                    }
-
+                    const { latitude, longitude } = pos.coords
+                    setUserLocation({ lat: latitude, lng: longitude })
+                    const now = Date.now()
+                    const last = lastLocationSent.current
+                    const shouldSend = !last || (now - last.time > 15000) || calculateDistance(last.lat, last.lng, latitude, longitude) > 20
                     if (shouldSend) {
-                        socket.emit('location-update', { lat: latitude, lng: longitude });
-                        lastLocationSent.current = { time: now, lat: latitude, lng: longitude };
+                        socket.emit('location-update', { lat: latitude, lng: longitude })
+                        lastLocationSent.current = { time: now, lat: latitude, lng: longitude }
                     }
                 },
                 (err) => console.warn('Geolocation error:', err),
                 { timeout: 10000, enableHighAccuracy: true, maximumAge: 5000 }
-            );
+            )
         }
 
         if (!socket.connected) {
             socket.io.opts.query = { name: username, id: userId }
             socket.connect()
         }
-        socket.on('pins-history', (history: Pin[]) => setPins(history))
-        socket.on('pin-added', (pin: Pin) => setPins(prev => [...prev, pin]))
-        
-        socket.on('requests-history', (history: DisasterRequest[]) => setRequests(history))
-        socket.on('request-created', (req: DisasterRequest) => setRequests(prev => [...prev, req]))
-        socket.on('request-updated', (req: DisasterRequest) => setRequests(prev => prev.map(p => p.id === req.id ? req : p)))
 
-        socket.on('resources-history', (history: ResourceAggregator[]) => setResources(history))
-        socket.on('resource-updated', (res: ResourceAggregator) => setResources(prev => prev.map(p => p.id === res.id ? res : p)))
-        
-        socket.on('users-history', (history: PublicUser[]) => setUsers(history))
-        socket.on('user-updated', (user: PublicUser) => {
-            setUsers(prev => prev.some(u => u.id === user.id) 
-                ? prev.map(u => u.id === user.id ? user : u) 
-                : [...prev, user]
-            )
-        })
+        const onPinsHistory = (h: Pin[]) => setPins(h)
+        const onPinAdded = (p: Pin) => setPins(prev => [...prev, p])
+        const onRequestsHistory = (h: DisasterRequest[]) => setRequests(h)
+        const onRequestCreated = (r: DisasterRequest) => setRequests(prev => [...prev, r])
+        const onRequestUpdated = (r: DisasterRequest) => setRequests(prev => prev.map(p => p.id === r.id ? r : p))
+        const onResourcesHistory = (h: ResourceAggregator[]) => setResources(h)
+        const onResourceUpdated = (r: ResourceAggregator) => setResources(prev => prev.map(p => p.id === r.id ? r : p))
+        const onUsersHistory = (h: PublicUser[]) => setUsers(h)
+        const onUserUpdated = (u: PublicUser) => setUsers(prev => prev.some(x => x.id === u.id) ? prev.map(x => x.id === u.id ? u : x) : [...prev, u])
+
+        socket.on('pins-history', onPinsHistory)
+        socket.on('pin-added', onPinAdded)
+        socket.on('requests-history', onRequestsHistory)
+        socket.on('request-created', onRequestCreated)
+        socket.on('request-updated', onRequestUpdated)
+        socket.on('resources-history', onResourcesHistory)
+        socket.on('resource-updated', onResourceUpdated)
+        socket.on('users-history', onUsersHistory)
+        socket.on('user-updated', onUserUpdated)
 
         socket.emit('request-pins-history')
         socket.emit('request-requests-history')
@@ -165,16 +158,11 @@ export function Map() {
         socket.emit('request-users-history')
 
         return () => {
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-            socket.off('pins-history')
-            socket.off('pin-added')
-            socket.off('requests-history')
-            socket.off('request-created')
-            socket.off('request-updated')
-            socket.off('resources-history')
-            socket.off('resource-updated')
-            socket.off('users-history')
-            socket.off('user-updated')
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            socket.off('pins-history', onPinsHistory); socket.off('pin-added', onPinAdded)
+            socket.off('requests-history', onRequestsHistory); socket.off('request-created', onRequestCreated); socket.off('request-updated', onRequestUpdated)
+            socket.off('resources-history', onResourcesHistory); socket.off('resource-updated', onResourceUpdated)
+            socket.off('users-history', onUsersHistory); socket.off('user-updated', onUserUpdated)
         }
     }, [username, userId])
 
@@ -185,228 +173,285 @@ export function Map() {
 
     const defaultCenter: [number, number] = [12.9109, 77.5223]
 
-    // Apply filters and search
     const filteredRequests = requests.filter(req => {
-        if (req.status === 'resolved' || req.status === 'cancelled' || req.status === 'expired') return false;
-        if (!filterPriorities.includes(req.priority)) return false;
-        if (filterCategories.length > 0 && !filterCategories.includes(req.category)) return false;
+        if (['resolved', 'cancelled', 'expired'].includes(req.status)) return false
+        if (!filterPriorities.includes(req.priority)) return false
+        if (filterCategories.length > 0 && !filterCategories.includes(req.category)) return false
         if (globalSearch) {
-            const q = globalSearch.toLowerCase();
-            if (!req.title.toLowerCase().includes(q) && !req.description.toLowerCase().includes(q)) return false;
+            const q = globalSearch.toLowerCase()
+            if (!req.title.toLowerCase().includes(q) && !req.description.toLowerCase().includes(q)) return false
         }
-        return true;
-    });
+        return true
+    })
 
     const filteredResources = resources.filter(res => {
-        if (filterResourceTypes.length > 0 && !filterResourceTypes.includes(res.type)) return false;
+        if (filterResourceTypes.length > 0 && !filterResourceTypes.includes(res.type)) return false
         if (globalSearch) {
-            const q = globalSearch.toLowerCase();
-            if (!res.name.toLowerCase().includes(q) && !res.type.toLowerCase().includes(q)) return false;
+            const q = globalSearch.toLowerCase()
+            if (!res.name.toLowerCase().includes(q) && !res.type.toLowerCase().includes(q)) return false
         }
-        return true;
-    });
+        return true
+    })
 
     return (
-        <div className="h-screen w-screen relative flex flex-col">
+        <div className="h-screen w-screen relative flex flex-col bg-[#0f172a]">
+            {/* Intent banner */}
             {intent && (
-                <div className="bg-blue-600 text-white text-center py-2 px-4 shadow-md font-semibold text-sm" style={{zIndex: 1001}}>
-                    📍 Tap anywhere on the map to drop a pin for your <strong>{intent.toUpperCase()}</strong> request.
+                <div className="bg-indigo-600/90 backdrop-blur-sm text-white text-center py-2.5 px-4 text-sm font-semibold z-[1001] border-b border-indigo-500/40 shrink-0">
+                    📍 Tap anywhere on the map to drop a{' '}
+                    <strong className="uppercase tracking-wide">{intent}</strong> request
                 </div>
             )}
+
+            {/* Map */}
             <div className="flex-1 relative z-0">
-                <MapContainer center={defaultCenter} zoom={16} minZoom={13} maxZoom={16} className="h-full w-full">
-                <TileLayer
-                    url={`http://${window.location.hostname}:3001/tiles/{z}/{x}/{y}.png`}
-                    attribution="Offline map tiles"
-                    errorTileUrl=""
-                />
-                <MapEventsHandler onMapClick={handleMapClick} />
-                
-                {/* Legacy Pins */}
-                {pins.map(pin => (
-                    <Marker key={pin.id} position={[pin.lat, pin.lng]}>
-                        <Tooltip permanent direction="top" offset={[0, -35]} className="pin-tooltip">
-                            <strong>{pin.label}</strong>
-                            <br />
-                            by {pin.name}
-                        </Tooltip>
-                        <Popup>
-                            <strong>{pin.label}</strong><br />
-                            by {pin.name}<br />
-                            <small>{new Date(pin.timestamp).toLocaleTimeString()}</small>
-                        </Popup>
-                    </Marker>
-                ))}
+                <MapContainer
+                    center={defaultCenter}
+                    zoom={16}
+                    minZoom={13}
+                    maxZoom={16}
+                    className="h-full w-full"
+                    zoomControl={false}
+                >
+                    <TileLayer
+                        url={`http://${window.location.hostname}:3001/tiles/{z}/{x}/{y}.png`}
+                        attribution="Offline map tiles"
+                        errorTileUrl=""
+                    />
+                    <MapEventsHandler onMapClick={handleMapClick} />
 
-                {/* New Requests */}
-                {filteredRequests.map(req => (
-                    <Marker key={req.id} position={[req.lat, req.lng]} icon={createRequestIcon(req.priority)}>
-                        <Popup minWidth={340} className="!p-0 !m-0 !bg-transparent !border-none !shadow-none">
-                            <RequestCard request={req} currentUserId={userId} resources={resources} />
-                        </Popup>
-                    </Marker>
-                ))}
-
-                {/* Resources */}
-                {filteredResources.map(res => (
-                    <Marker key={res.id} position={[res.lat, res.lng]} icon={createResourceIcon(res.status)}>
-                        <Popup minWidth={340} className="!p-0 !m-0 !bg-transparent !border-none !shadow-none">
-                            <ResourceCard resource={res} userLocation={userLocation} />
-                        </Popup>
-                    </Marker>
-                ))}
-
-                {/* Users */}
-                {users.filter(u => u.is_online && u.lat !== null && u.lng !== null && u.id !== userId).map(user => (
-                    <Marker key={user.id} position={[user.lat!, user.lng!]} icon={createUserIcon()}>
-                        <Tooltip direction="top" offset={[0, -10]} className="user-tooltip opacity-100 bg-white/90 backdrop-blur-sm border-slate-200 shadow-md p-2 rounded-lg">
-                            <div className="text-center font-sans min-w-[80px]">
-                                <div className="font-bold text-sm text-slate-800">{user.name}</div>
-                                <div className="text-[10px] text-slate-500 capitalize">{user.role}</div>
-                                {user.status && user.status !== 'unknown' && (
-                                    <div className="text-[9px] mt-1 font-semibold uppercase px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700">
-                                        {user.status.replace('_', ' ')}
-                                    </div>
-                                )}
-                                <div className="text-[9px] text-slate-400 mt-1 whitespace-nowrap">
-                                    Seen {getRelativeTime(user.last_seen)}
+                    {/* Pins */}
+                    {pins.map(pin => (
+                        <Marker key={pin.id} position={[pin.lat, pin.lng]}>
+                            <Tooltip permanent direction="top" offset={[0, -20]} className="pin-tooltip">
+                                <strong>{pin.label}</strong> — {pin.name}
+                            </Tooltip>
+                            <Popup className="!p-0 !m-0 !bg-transparent !border-none !shadow-none">
+                                <div className="bg-slate-900 border border-white/10 rounded-xl p-3 text-white text-xs min-w-[140px]">
+                                    <p className="font-bold mb-1">{pin.label}</p>
+                                    <p className="text-slate-400">by {pin.name}</p>
+                                    <p className="text-slate-600 mt-1">{new Date(pin.timestamp).toLocaleTimeString()}</p>
                                 </div>
-                            </div>
-                        </Tooltip>
-                    </Marker>
-                ))}
-            </MapContainer>
+                            </Popup>
+                        </Marker>
+                    ))}
+
+                    {/* Requests */}
+                    {filteredRequests.map(req => (
+                        <Marker key={req.id} position={[req.lat, req.lng]} icon={createRequestIcon(req.priority)}>
+                            <Popup minWidth={320} className="!p-0 !m-0 !bg-transparent !border-none !shadow-none">
+                                <RequestCard request={req} currentUserId={userId} resources={resources} />
+                            </Popup>
+                        </Marker>
+                    ))}
+
+                    {/* Resources */}
+                    {filteredResources.map(res => (
+                        <Marker key={res.id} position={[res.lat, res.lng]} icon={createResourceIcon(res.status)}>
+                            <Popup minWidth={320} className="!p-0 !m-0 !bg-transparent !border-none !shadow-none">
+                                <ResourceCard resource={res} userLocation={userLocation} />
+                            </Popup>
+                        </Marker>
+                    ))}
+
+                    {/* Users */}
+                    {users.filter(u => u.is_online && u.lat !== null && u.lng !== null && u.id !== userId).map(user => (
+                        <Marker key={user.id} position={[user.lat!, user.lng!]} icon={createUserIcon(user.name)}>
+                            <Tooltip direction="top" offset={[0, -12]} className="user-tooltip opacity-100">
+                                <div className="text-center min-w-[80px]">
+                                    <div className="font-bold text-sm text-slate-100">{user.name}</div>
+                                    <div className="text-[10px] text-slate-400 capitalize mt-0.5">{user.role}</div>
+                                    {user.status && user.status !== 'unknown' && (
+                                        <div className="text-[9px] mt-1 font-bold uppercase tracking-wide text-slate-300">
+                                            {user.status.replace('_', ' ')}
+                                        </div>
+                                    )}
+                                    <div className="text-[9px] text-slate-500 mt-1">
+                                        {getRelativeTime(user.last_seen)}
+                                    </div>
+                                </div>
+                            </Tooltip>
+                        </Marker>
+                    ))}
+                </MapContainer>
             </div>
 
-            {/* Global Search and Filter Bar — sits inside the map area, below intent banner */}
-            <div className="absolute left-3 right-3 z-[1000] flex gap-2" style={{top: intent ? 'calc(2.5rem + 8px)' : '12px'}}>
-                <input 
-                    type="search" 
-                    placeholder="🔍 Search requests or resources..." 
-                    aria-label="Global map search"
-                    value={globalSearch}
-                    onChange={e => setGlobalSearch(e.target.value)}
-                    className="flex-1 bg-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button 
+            {/* ── Top Bar: Search + Filter + Needs Help ── */}
+            <div
+                className="absolute left-3 right-3 z-[1000] flex gap-2"
+                style={{ top: intent ? 'calc(2.75rem + 10px)' : '12px' }}
+            >
+                {/* Back button */}
+                <Link
+                    to="/"
+                    className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-900/90 border border-white/[0.08] shadow-lg backdrop-blur-sm text-slate-300 hover:text-white hover:bg-slate-800/90 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 shrink-0"
+                    aria-label="Back to Dashboard"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
+                    </svg>
+                </Link>
+
+                {/* Search */}
+                <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">🔍</span>
+                    <input
+                        type="search"
+                        placeholder="Search requests or resources..."
+                        aria-label="Global map search"
+                        value={globalSearch}
+                        onChange={e => setGlobalSearch(e.target.value)}
+                        className="w-full bg-slate-900/90 border border-white/[0.08] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/40 focus:bg-slate-800/90 transition-all shadow-lg backdrop-blur-sm"
+                    />
+                </div>
+
+                {/* Filter */}
+                <button
                     onClick={() => setIsFilterOpen(!isFilterOpen)}
-                    className={`px-4 py-2.5 rounded-xl shadow-lg border text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${isFilterOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 ${isFilterOpen || hasActiveFilters ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-900/90 text-slate-300 border-white/[0.08] hover:border-white/15 hover:text-white'}`}
                     aria-label="Toggle map filters"
                 >
-                    Filters {(filterPriorities.length < 5 || filterCategories.length > 0 || filterResourceTypes.length > 0) && '●'}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 018 18.25v-5.757a2.25 2.25 0 00-.659-1.591L2.659 6.22A2.25 2.25 0 012 4.629V2.34a.75.75 0 01.628-.74z" clipRule="evenodd" />
+                    </svg>
+                    {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-[#FFFDD0]" />}
+                </button>
+
+                {/* Needs Help */}
+                <button
+                    onClick={() => setIsPanelOpen(true)}
+                    className="flex items-center gap-1.5 bg-[#FFFDD0] hover:bg-white text-slate-900 font-bold px-3 py-2.5 rounded-xl shadow-lg border-0 transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]/50 text-sm shrink-0"
+                    aria-label={`View Needs Help panel`}
+                >
+                    🆘 <span className="hidden sm:inline">Needs Help</span> ({filteredRequests.length})
                 </button>
             </div>
 
-            {/* Filter Menu Dropdown */}
+            {/* ── Filter Dropdown ── */}
             {isFilterOpen && (
-                <div className="absolute left-3 z-[1001] bg-white rounded-xl shadow-2xl border border-slate-200 p-4 w-72 max-h-[70vh] overflow-y-auto" style={{top: intent ? 'calc(2.5rem + 56px)' : '60px'}}>
-                    <h3 className="font-bold text-sm mb-3">Priority</h3>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {[1,2,3,4,5].map(p => (
-                            <button
-                                key={p}
-                                onClick={() => setFilterPriorities(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
-                                className={`px-2 py-1 text-xs rounded border ${filterPriorities.includes(p) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-slate-50 border-slate-200 text-slate-500'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
-                            >
-                                P{p}
-                            </button>
-                        ))}
-                    </div>
-                    
-                    <h3 className="font-bold text-sm mb-3">Request Category</h3>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {['medical', 'rescue', 'medicine', 'water', 'food', 'shelter', 'sanitation', 'transport', 'information'].map(c => (
-                            <button
-                                key={c}
-                                onClick={() => setFilterCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])}
-                                className={`px-2 py-1 text-xs rounded border capitalize ${filterCategories.includes(c) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-slate-50 border-slate-200 text-slate-500'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
-                            >
-                                {c}
-                            </button>
-                        ))}
+                <div
+                    className="absolute left-3 z-[1001] bg-slate-900/95 backdrop-blur-xl border border-white/[0.07] rounded-2xl shadow-2xl p-4 w-72 max-h-[60vh] overflow-y-auto"
+                    style={{ top: intent ? 'calc(2.75rem + 62px)' : '62px' }}
+                >
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-sm text-white">Filters</h3>
+                        <button
+                            onClick={() => { setFilterPriorities([1, 2, 3, 4, 5]); setFilterCategories([]); setFilterResourceTypes([]) }}
+                            className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
+                        >Reset all</button>
                     </div>
 
-                    <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
-                        <button 
-                            onClick={() => {
-                                setFilterPriorities([1,2,3,4,5]);
-                                setFilterCategories([]);
-                                setFilterResourceTypes([]);
-                            }}
-                            className="text-xs text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                            Reset All
-                        </button>
-                        <button onClick={() => setIsFilterOpen(false)} className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                            Apply
-                        </button>
+                    <div className="mb-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-2">Priority</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                            {[
+                                { p: 1, label: 'Critical', color: 'bg-red-500/20 text-red-300 border-red-500/30' },
+                                { p: 2, label: 'Urgent',   color: 'bg-orange-500/20 text-orange-300 border-orange-500/30' },
+                                { p: 3, label: 'High',     color: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+                                { p: 4, label: 'Medium',   color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
+                                { p: 5, label: 'Low',      color: 'bg-slate-700/40 text-slate-400 border-slate-600/30' },
+                            ].map(({ p, label, color }) => (
+                                <button
+                                    key={p}
+                                    onClick={() => setFilterPriorities(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
+                                    className={`px-2.5 py-1 text-[10px] font-bold rounded-full border transition-all focus-visible:outline-none ${filterPriorities.includes(p) ? color : 'bg-white/[0.03] border-white/[0.05] text-slate-600 hover:text-slate-400'}`}
+                                >P{p} {label}</button>
+                            ))}
+                        </div>
                     </div>
+
+                    <div className="mb-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-2">Category</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                            {['medical', 'rescue', 'medicine', 'water', 'food', 'shelter', 'sanitation', 'transport', 'information'].map(c => (
+                                <button
+                                    key={c}
+                                    onClick={() => setFilterCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])}
+                                    className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border capitalize transition-all focus-visible:outline-none ${filterCategories.includes(c) ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/[0.03] border-white/[0.05] text-slate-600 hover:text-slate-400'}`}
+                                >{c}</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => setIsFilterOpen(false)}
+                        className="w-full bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold py-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    >Apply & Close</button>
                 </div>
             )}
 
-            {/* View Requests Toggle */}
-            <div className="absolute right-3 z-[1000]" style={{top: intent ? 'calc(2.5rem + 8px)' : '12px'}}>
-                <button 
-                    onClick={() => setIsPanelOpen(true)}
-                    className="bg-[#FFFDD0] text-slate-900 font-bold px-4 py-2.5 rounded-xl shadow-lg border-2 border-white/20 hover:scale-105 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 text-sm"
-                    aria-label={`View Needs Help panel, ${filteredRequests.length} active requests`}
-                >
-                    🆘 Needs Help ({filteredRequests.length})
-                </button>
-            </div>
-
-            {/* Collapsible Legend */}
-            <div className="absolute bottom-6 left-4 z-[1000] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden w-48">
-                <button 
+            {/* ── Legend ── */}
+            <div className="absolute bottom-5 left-3 z-[1000]">
+                <button
                     onClick={() => setIsLegendOpen(!isLegendOpen)}
-                    className="w-full px-4 py-2 bg-slate-50 text-slate-700 font-semibold text-sm flex justify-between items-center hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="flex items-center gap-2 bg-slate-900/90 border border-white/[0.08] rounded-xl px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white transition-all shadow-lg backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                     aria-expanded={isLegendOpen}
                 >
-                    Map Legend
-                    <span>{isLegendOpen ? '▼' : '▲'}</span>
+                    <span>🗺️</span> Legend <span className="text-slate-600">{isLegendOpen ? '▲' : '▼'}</span>
                 </button>
+
                 {isLegendOpen && (
-                    <div className="p-4 space-y-3 text-xs text-slate-600 bg-white">
-                        <div>
-                            <p className="font-bold mb-2">Requests</p>
-                            <div className="flex items-center gap-2 mb-1.5"><div className="w-3 h-3 rounded-full bg-red-600 border border-slate-300"></div> CRITICAL</div>
-                            <div className="flex items-center gap-2 mb-1.5"><div className="w-3 h-3 rounded-full bg-orange-500 border border-slate-300"></div> URGENT</div>
-                            <div className="flex items-center gap-2 mb-1.5"><div className="w-3 h-3 rounded-full bg-amber-500 border border-slate-300"></div> HIGH</div>
-                            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-600 border border-slate-300"></div> NORMAL/LOW</div>
+                    <div className="absolute bottom-full mb-2 left-0 bg-slate-900/95 backdrop-blur-xl border border-white/[0.07] rounded-xl p-4 text-xs text-slate-400 w-48 shadow-2xl">
+                        <div className="mb-3">
+                            <p className="font-bold text-slate-300 mb-2 text-[10px] uppercase tracking-wider">Requests</p>
+                            {[
+                                { color: 'bg-red-500', label: 'Critical (P1)' },
+                                { color: 'bg-orange-500', label: 'Urgent (P2)' },
+                                { color: 'bg-amber-500', label: 'High (P3)' },
+                                { color: 'bg-indigo-500', label: 'Medium (P4)' },
+                                { color: 'bg-slate-600', label: 'Low (P5)' },
+                            ].map(({ color, label }) => (
+                                <div key={label} className="flex items-center gap-2 mb-1.5">
+                                    <div className={`w-3 h-3 rounded-full ${color} shrink-0`} />
+                                    {label}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mb-3">
+                            <p className="font-bold text-slate-300 mb-2 text-[10px] uppercase tracking-wider">Resources</p>
+                            {[
+                                { color: 'bg-indigo-500', label: 'Open' },
+                                { color: 'bg-amber-500', label: 'Limited' },
+                                { color: 'bg-red-500', label: 'Closed' },
+                            ].map(({ color, label }) => (
+                                <div key={label} className="flex items-center gap-2 mb-1.5">
+                                    <div className={`w-3 h-3 rounded ${color} shrink-0`} />
+                                    {label}
+                                </div>
+                            ))}
                         </div>
                         <div>
-                            <p className="font-bold mb-2">Resources</p>
-                            <div className="flex items-center gap-2 mb-1.5"><div className="w-3 h-3 bg-blue-600 rounded-sm border border-slate-300"></div> OPEN</div>
-                            <div className="flex items-center gap-2 mb-1.5"><div className="w-3 h-3 bg-amber-500 rounded-sm border border-slate-300"></div> LIMITED</div>
-                            <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-600 rounded-sm border border-slate-300"></div> CLOSED</div>
-                        </div>
-                        <div>
-                            <p className="font-bold mb-2 mt-3">Users</p>
-                            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-emerald-500 border border-slate-300"></div> CONNECTED</div>
+                            <p className="font-bold text-slate-300 mb-2 text-[10px] uppercase tracking-wider">Users</p>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" /> Online
+                            </div>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Instructional Overlay — only show when no intent banner, so user knows they can tap */}
+            {/* ── Tap hint ── */}
             {!intent && (
-                <div className="absolute left-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-md text-xs z-[999] text-slate-600 border border-slate-200" style={{top: '56px'}}>
-                    📍 Tap anywhere on the map to drop a request
+                <div
+                    className="absolute left-3 z-[999] bg-slate-900/80 backdrop-blur-sm border border-white/[0.06] px-3 py-1.5 rounded-xl text-xs text-slate-500 shadow-md pointer-events-none"
+                    style={{ top: '62px' }}
+                >
+                    Tap map to drop a request
                 </div>
             )}
 
-            {/* Overlays */}
+            {/* ── Overlays ── */}
             {clickCoords && (
-                <RequestModal 
-                    isOpen={isModalOpen} 
-                    onClose={() => { setIsModalOpen(false); setClickCoords(null); }} 
-                    lat={clickCoords.lat} 
+                <RequestModal
+                    isOpen={isModalOpen}
+                    onClose={() => { setIsModalOpen(false); setClickCoords(null) }}
+                    lat={clickCoords.lat}
                     lng={clickCoords.lng}
                     initialCategory={intent}
                 />
             )}
 
-            <RequestListPanel 
+            <RequestListPanel
                 isOpen={isPanelOpen}
                 onClose={() => setIsPanelOpen(false)}
                 requests={filteredRequests}

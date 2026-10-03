@@ -6,11 +6,7 @@ import { RequestCard } from './RequestCard'
 import { ResourceCard } from './ResourceCard'
 
 export function Chat() {
-    const [username, setUsername] = useState<string>(
-        localStorage.getItem('chat-username') || ''
-    )
-    const [joined, setJoined] = useState(false)
-    const [inputName, setInputName] = useState('')
+    const username = localStorage.getItem('chat-username') || ''
     const [message, setMessage] = useState('')
     const [messages, setMessages] = useState<(ChatMessage & { self?: boolean })[]>([])
     const [connected, setConnected] = useState(socket.connected)
@@ -20,9 +16,8 @@ export function Chat() {
     const bottomRef = useRef<HTMLDivElement>(null)
     const userId = localStorage.getItem('chat-userid') || ''
 
-    // Socket events — listeners registered BEFORE connect so chat-history is never missed
     useEffect(() => {
-        if (!username) return  // don't connect until user has joined
+        if (!username) return
 
         socket.io.opts.query = { name: username, id: userId }
 
@@ -30,7 +25,6 @@ export function Chat() {
         const onDisconnect = () => setConnected(false)
 
         const onHistory = (history: ChatMessage[]) => {
-            // Merge server history with any local system messages (e.g. "You joined as...")
             setMessages(prev => {
                 const systemMsgs = prev.filter(m => m.name === 'System')
                 const historyMsgs = history.map(m => ({ ...m, self: m.name === username }))
@@ -46,7 +40,7 @@ export function Chat() {
         socket.on('disconnect', onDisconnect)
         socket.on('chat-history', onHistory)
         socket.on('server-message', onServerMessage)
-        
+
         socket.on('requests-history', (history: DisasterRequest[]) => setRequests(history))
         socket.on('request-created', (req: DisasterRequest) => {
             setRequests(prev => [...prev, req])
@@ -60,7 +54,6 @@ export function Chat() {
             }])
         })
         socket.on('request-updated', (req: DisasterRequest) => setRequests(prev => prev.map(p => p.id === req.id ? req : p)))
-
         socket.on('resources-history', (history: ResourceAggregator[]) => setResources(history))
         socket.on('resource-updated', (res: ResourceAggregator) => setResources(prev => prev.map(p => p.id === res.id ? res : p)))
 
@@ -68,7 +61,6 @@ export function Chat() {
         socket.emit('request-requests-history')
         socket.emit('request-resources')
 
-        // Connect AFTER all listeners are in place
         if (!socket.connected) socket.connect()
 
         return () => {
@@ -84,20 +76,9 @@ export function Chat() {
         }
     }, [username])
 
-    // Auto scroll to latest message
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
-
-    const handleJoin = () => {
-        const name = inputName.trim()
-        if (!name) return
-        localStorage.setItem('chat-username', name)
-        setJoined(true)
-        // Add system message first, then setUsername triggers useEffect → connect → chat-history
-        setMessages([{ id: 'sys1', name: 'System', message: `You joined as "${name}"`, timestamp: Date.now(), self: false }])
-        setUsername(name)
-    }
 
     const handleSend = () => {
         const text = message.trim()
@@ -111,195 +92,193 @@ export function Chat() {
         if (e.key === 'Enter') handleSend()
     }
 
-    // ── Join Screen ────────────────────────────────────────
-    if (!joined && !username) {
-        return (
-            <div className="min-h-svh bg-slate-950 flex items-center justify-center px-5 sm:px-6 py-10">
-                {/* Ambient glow */}
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] sm:w-[500px] h-[320px] sm:h-[500px] bg-violet-600/8 rounded-full blur-3xl" />
-                </div>
+    const avatarInitial = username.charAt(0).toUpperCase()
+    const avatarColor = `hsl(${username.charCodeAt(0) * 15}, 60%, 50%)`
 
-                <div className="relative w-full max-w-sm bg-slate-900/80 border border-white/[0.06] rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
-                    <div className="text-center mb-6 sm:mb-8">
-                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#FFFDD0] flex items-center justify-center mx-auto mb-4 sm:mb-5 shadow-lg shadow-soft-cream/20 text-slate-900 text-2xl sm:text-3xl">
-                            💬
-                        </div>
-                        <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Join the Chat</h1>
-                        <p className="text-slate-400 text-xs sm:text-sm mt-1.5 sm:mt-2 leading-relaxed px-4 sm:px-0">
-                            Everyone on the network can see your messages
-                        </p>
-                    </div>
-
-                    <input
-                        id="username-input"
-                        type="text"
-                        placeholder="Enter your name..."
-                        value={inputName}
-                        onChange={e => setInputName(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleJoin()}
-                        autoComplete="off"
-                        className="w-full bg-white/[0.04] text-white placeholder-slate-500 border border-white/10 rounded-xl px-4 py-3 sm:py-3.5 text-sm outline-none focus:border-[#FFFDD0] focus:ring-1 focus:ring-violet-500/50 transition mb-3 sm:mb-4"
-                    />
-
-                    <button
-                        id="join-btn"
-                        onClick={handleJoin}
-                        disabled={!inputName.trim()}
-                        className="w-full bg-gradient-to-r from-[#FFFDD0] to-[#FFFDD0] hover:from-slate-500 hover:to-slate-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-black font-semibold py-3 sm:py-3.5 rounded-xl transition-all duration-200 text-sm sm:text-base"
-                    >
-                        Enter Chat →
-                    </button>
-
-                    <Link to="/" className="block text-center text-slate-500 hover:text-slate-300 text-[11px] sm:text-xs mt-5 sm:mt-6 transition">
-                        ← Back to Dashboard
-                    </Link>
-                </div>
-            </div>
-        )
-    }
-
-    // ── Chat Screen ────────────────────────────────────────
     return (
-        <div className="h-svh bg-slate-950 flex flex-col overflow-hidden">
+        <div className="h-svh bg-[#020617] flex flex-col overflow-hidden relative">
+            {/* Background */}
+            <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/20 via-[#020617] to-[#020617]" />
+            </div>
 
-            {/* Header */}
-            <div className="bg-slate-900/80 border-b border-white/[0.06] px-3 sm:px-5 py-3 sm:py-3.5 flex items-center justify-between backdrop-blur-xl shrink-0 z-10">
+            {/* ── Header ── */}
+            <div className="relative bg-slate-900/80 border-b border-white/[0.06] px-3 sm:px-5 py-3 flex items-center justify-between backdrop-blur-xl shrink-0 z-10">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                    <Link to="/" className="text-white hover:text-white transition shrink-0 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded" aria-label="Back to Dashboard">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 20 20" fill="currentColor">
+                    <Link
+                        to="/"
+                        className="text-slate-400 hover:text-white transition shrink-0 p-1.5 rounded-lg hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                        aria-label="Back to Dashboard"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
                         </svg>
                     </Link>
 
                     <div className="min-w-0">
-                        <h1 className="text-[#FFFDD0] font-semibold text-xs sm:text-sm truncate">Global Chat Room</h1>
-                        <p className="text-slate-400 text-[10px] sm:text-xs truncate">Open to everyone on the network</p>
+                        <h1 className="text-white font-bold text-sm truncate">Global Chat</h1>
+                        <p className="text-slate-500 text-[10px] truncate">Open to everyone on the network</p>
                     </div>
                 </div>
+
                 <div className="flex items-center gap-2 shrink-0">
-                    <button 
+                    {/* Resources toggle */}
+                    <button
                         onClick={() => setDrawerOpen(!drawerOpen)}
-                        className="bg-[#FFFDD0]/10 text-[#FFFDD0] border border-[#FFFDD0]/20 hover:bg-[#FFFDD0]/20 text-[10px] sm:text-xs px-2.5 py-1.5 rounded-full transition font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]"
+                        className={`text-[10px] sm:text-xs px-2.5 py-1.5 rounded-full transition-all font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 border ${drawerOpen ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300' : 'bg-white/[0.04] border-white/[0.06] text-slate-400 hover:border-white/10 hover:text-slate-300'}`}
                         aria-expanded={drawerOpen}
                         aria-label="Toggle Available Resources Drawer"
                     >
-                        {drawerOpen ? 'Close Resources' : 'Resources'}
+                        📦 Resources
                     </button>
-                    <div className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.04] px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/[0.06]">
-                        <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${connected ? 'bg-emerald-400 shadow shadow-emerald-400/50' : 'bg-rose-400 shadow shadow-rose-400/50'}`} />
-                        <span className="text-[10px] sm:text-xs text-slate-400 font-medium">{connected ? 'Live' : 'Offline'}</span>
+
+                    {/* Connection status */}
+                    <div className="flex items-center gap-1.5 bg-white/[0.03] px-2.5 py-1.5 rounded-full border border-white/[0.06]">
+                        <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-400 shadow-sm shadow-emerald-400/60' : 'bg-rose-400 shadow-sm shadow-rose-400/60'} ${connected ? 'animate-pulse' : ''}`} />
+                        <span className="text-[10px] text-slate-500 font-medium">{connected ? 'Live' : 'Offline'}</span>
                     </div>
                 </div>
             </div>
 
+            {/* ── Resources Drawer ── */}
             {drawerOpen && (
-                <div className="absolute right-0 top-[60px] bottom-[70px] w-full sm:w-80 bg-slate-900 border-l border-white/10 shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200">
-                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-900/50">
+                <div className="absolute right-0 top-[57px] bottom-[72px] w-full sm:w-80 bg-slate-900/95 border-l border-white/[0.06] shadow-2xl z-20 flex flex-col backdrop-blur-xl"
+                    style={{ animation: 'cosmos-slide-in-right 0.25s ease' }}>
+                    <div className="p-4 border-b border-white/[0.06] flex justify-between items-center shrink-0">
                         <h2 className="text-white font-bold text-sm">Available Resources</h2>
-                        <button 
-                            onClick={() => setDrawerOpen(false)} 
-                            className="text-slate-400 hover:text-white text-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-full w-8 h-8 flex items-center justify-center"
+                        <button
+                            onClick={() => setDrawerOpen(false)}
+                            className="w-7 h-7 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-slate-400 hover:text-white flex items-center justify-center text-lg font-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                             aria-label="Close Resources Drawer"
-                        >
-                            &times;
-                        </button>
+                        >×</button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3">
                         {resources.map(res => (
                             <div key={res.id} className="relative group">
                                 <ResourceCard resource={res} />
-                                <button 
+                                <button
                                     onClick={() => {
                                         socket.emit('share-resource', { resourceId: res.id, message: `Check out this resource: ${res.name}` })
-                                        if (window.innerWidth < 640) setDrawerOpen(false) // auto close on mobile
+                                        if (window.innerWidth < 640) setDrawerOpen(false)
                                     }}
-                                    className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs px-3 py-1.5 rounded shadow-lg transition opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                    className="absolute top-2 right-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-2.5 py-1 rounded-lg shadow-lg transition-all opacity-0 group-hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                     aria-label={`Share ${res.name} to chat`}
-                                >
-                                    Share
-                                </button>
+                                >Share</button>
                             </div>
                         ))}
                         {resources.length === 0 && (
-                            <div className="text-center text-slate-500 text-xs mt-10">No resources available.</div>
+                            <div className="text-center text-slate-600 text-xs mt-12">No resources available</div>
                         )}
                     </div>
                 </div>
             )}
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-6 space-y-2.5 sm:space-y-3">
+            {/* ── Messages ── */}
+            <div className="relative flex-1 overflow-y-auto px-3 sm:px-5 py-5 space-y-3">
                 {messages.length === 0 && (
-                    <div className="text-center mt-20 sm:mt-32">
-                        <div className="text-4xl sm:text-5xl mb-3 sm:mb-4">👋</div>
-                        <p className="text-slate-500 text-xs sm:text-sm">No messages yet</p>
-                        <p className="text-slate-600 text-[10px] sm:text-xs mt-1">Be the first to say hello!</p>
+                    <div className="flex flex-col items-center justify-center h-full text-center pb-10">
+                        <div className="text-5xl mb-4 opacity-30">💬</div>
+                        <p className="text-slate-600 text-sm font-medium">No messages yet</p>
+                        <p className="text-slate-700 text-xs mt-1">Be the first to say something</p>
                     </div>
                 )}
 
-                {messages.map((msg, i) => (
-                    <div
-                        key={i}
-                        className={`flex flex-col ${msg.self ? 'items-end' : 'items-start'}`}
-                    >
-                        {!msg.self && (
-                            <span className="text-[10px] sm:text-[11px] text-slate-500 mb-0.5 sm:mb-1 ml-3 font-medium">{msg.name}</span>
-                        )}
+                {messages.map((msg, i) => {
+                    const isSystem = msg.name === 'System' || msg.name === 'Emergency System'
+                    const isEmergency = msg.name === 'Emergency System'
+                    return (
                         <div
-                            className={`max-w-[90%] sm:max-w-[80%] px-3.5 sm:px-4 py-2 sm:py-2.5 text-[13px] sm:text-sm leading-relaxed
-                ${msg.self
-                                    ? 'bg-gradient-to-r from-[#FFFDD0] to-[#FFFDD0] text-black rounded-2xl rounded-br-md shadow shadow-[#FFFDD0]'
-                                    : msg.name === 'System'
-                                        ? 'bg-white/[0.03] text-slate-500 italic text-[11px] sm:text-xs rounded-2xl border border-white/[0.04] px-3.5 sm:px-4 py-1.5 sm:py-2'
-                                        : 'bg-white/[0.05] text-slate-200 rounded-2xl rounded-bl-md border border-white/[0.06]'
-                                }`}
+                            key={i}
+                            className={`flex flex-col ${msg.self ? 'items-end' : isSystem ? 'items-center' : 'items-start'} cosmos-fade-in`}
                         >
-                            {msg.attachment ? (
-                                <div className="flex flex-col gap-2">
-                                    {msg.message && <span className="font-semibold">{msg.message}</span>}
-                                    <div className={`${msg.self ? '[&>div]:!bg-black/10 [&>div]:!border-black/20 [&_h3]:!text-black [&_p]:!text-black/80 [&_span]:!text-black [&_button]:!bg-black/5' : ''}`}>
-                                        {msg.attachment.type === 'request' && requests.find(r => r.id === msg.attachment!.id) && (
-                                            <RequestCard request={requests.find(r => r.id === msg.attachment!.id)!} currentUserId={userId} />
+                            {/* Sender name */}
+                            {!msg.self && !isSystem && (
+                                <span className="text-[10px] text-slate-500 mb-1 ml-2 font-medium">{msg.name}</span>
+                            )}
+                            {isEmergency && (
+                                <span className="text-[10px] text-red-400 mb-1 font-bold uppercase tracking-wide">🚨 Emergency System</span>
+                            )}
+
+                            {/* Bubble */}
+                            <div
+                                className={`max-w-[85%] sm:max-w-[75%] text-sm leading-relaxed
+                                    ${msg.self
+                                        ? 'bg-[#FFFDD0] text-slate-900 rounded-2xl rounded-br-sm px-4 py-2.5 shadow-sm'
+                                        : isSystem && !isEmergency
+                                            ? 'bg-white/[0.03] text-slate-500 italic text-xs rounded-xl px-4 py-2 border border-white/[0.05]'
+                                            : isEmergency
+                                                ? 'bg-red-950/60 border border-red-500/20 rounded-2xl px-0 py-0 overflow-hidden w-full max-w-sm'
+                                                : 'bg-slate-800/70 border border-white/[0.05] text-slate-200 rounded-2xl rounded-bl-sm px-4 py-2.5'
+                                    }`}
+                            >
+                                {msg.attachment ? (
+                                    <div className="flex flex-col">
+                                        {msg.message && !isEmergency && (
+                                            <span className="font-semibold px-4 pt-3 pb-1 block">{msg.message}</span>
                                         )}
-                                        {msg.attachment.type === 'resource' && resources.find(r => r.id === msg.attachment!.id) && (
-                                            <ResourceCard resource={resources.find(r => r.id === msg.attachment!.id)!} />
-                                        )}
+                                        <div>
+                                            {msg.attachment.type === 'request' && requests.find(r => r.id === msg.attachment!.id) && (
+                                                <RequestCard
+                                                    request={requests.find(r => r.id === msg.attachment!.id)!}
+                                                    currentUserId={userId}
+                                                />
+                                            )}
+                                            {msg.attachment.type === 'resource' && resources.find(r => r.id === msg.attachment!.id) && (
+                                                <ResourceCard resource={resources.find(r => r.id === msg.attachment!.id)!} />
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ) : (
-                                msg.message
+                                ) : (
+                                    msg.message
+                                )}
+                            </div>
+
+                            {/* Timestamp */}
+                            {!isSystem && (
+                                <span className="text-[9px] text-slate-700 mt-1 mx-2">
+                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
                             )}
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
                 <div ref={bottomRef} />
             </div>
 
-            {/* Input Bar — safe-area padding at bottom for phones with gesture bars */}
-            <div className="bg-slate-900/80 border-t border-white/[0.06] px-3 sm:px-4 py-2.5 sm:py-3.5 flex items-center gap-2 sm:gap-3 backdrop-blur-xl shrink-0 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#FFFDD0] to-[#FFFDD0] flex items-center justify-center text-xs sm:text-sm text-black font-bold shrink-0 shadow shadow-black">
-                    {username.charAt(0).toUpperCase()}
+            {/* ── Input Bar ── */}
+            <div className="relative bg-slate-900/80 border-t border-white/[0.06] px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-3 backdrop-blur-xl shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
+                {/* Avatar */}
+                <div
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold shrink-0 text-white shadow-sm"
+                    style={{ backgroundColor: avatarColor }}
+                >
+                    {avatarInitial}
                 </div>
+
+                {/* Input */}
                 <input
                     id="message-input"
                     type="text"
-                    placeholder="Type a message..."
+                    placeholder={connected ? "Type a message..." : "Reconnecting..."}
                     aria-label="Message input"
                     value={message}
                     onChange={e => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                     disabled={!connected}
                     autoComplete="off"
-                    className="flex-1 min-w-0 bg-white/[0.04] text-white placeholder-slate-500 border border-white/10 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-sm outline-none focus:border-[#FFFDD0] focus:ring-1 focus:ring-[#FFFDD0] transition disabled:opacity-30"
+                    className="flex-1 min-w-0 bg-white/[0.04] text-white placeholder-slate-600 border border-white/[0.07] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500/40 focus:bg-white/[0.06] transition-all disabled:opacity-30"
                 />
+
+                {/* Send */}
                 <button
                     id="send-btn"
                     onClick={handleSend}
                     disabled={!message.trim() || !connected}
-                    className="bg-gradient-to-r from-[#FFFDD0] to-[#FFFDD0] hover:from-[#FFFDD0] hover:to-[#FFFDD0] disabled:opacity-30 disabled:cursor-not-allowed text-black px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 shadow shadow-black/20 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="shrink-0 bg-[#FFFDD0] hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed text-slate-900 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFDD0]/50 shadow-sm"
                 >
-                    Send
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
+                    </svg>
                 </button>
             </div>
         </div>
