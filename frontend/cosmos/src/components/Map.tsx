@@ -132,15 +132,25 @@ export function Map() {
             socket.connect()
         }
 
-        socket.on('pins-history', (h: Pin[]) => setPins(h))
-        socket.on('pin-added', (p: Pin) => setPins(prev => [...prev, p]))
-        socket.on('requests-history', (h: DisasterRequest[]) => setRequests(h))
-        socket.on('request-created', (r: DisasterRequest) => setRequests(prev => [...prev, r]))
-        socket.on('request-updated', (r: DisasterRequest) => setRequests(prev => prev.map(p => p.id === r.id ? r : p)))
-        socket.on('resources-history', (h: ResourceAggregator[]) => setResources(h))
-        socket.on('resource-updated', (r: ResourceAggregator) => setResources(prev => prev.map(p => p.id === r.id ? r : p)))
-        socket.on('users-history', (h: PublicUser[]) => setUsers(h))
-        socket.on('user-updated', (u: PublicUser) => setUsers(prev => prev.some(x => x.id === u.id) ? prev.map(x => x.id === u.id ? u : x) : [...prev, u]))
+        const onPinsHistory = (h: Pin[]) => setPins(h)
+        const onPinAdded = (p: Pin) => setPins(prev => [...prev, p])
+        const onRequestsHistory = (h: DisasterRequest[]) => setRequests(h)
+        const onRequestCreated = (r: DisasterRequest) => setRequests(prev => [...prev, r])
+        const onRequestUpdated = (r: DisasterRequest) => setRequests(prev => prev.map(p => p.id === r.id ? r : p))
+        const onResourcesHistory = (h: ResourceAggregator[]) => setResources(h)
+        const onResourceUpdated = (r: ResourceAggregator) => setResources(prev => prev.map(p => p.id === r.id ? r : p))
+        const onUsersHistory = (h: PublicUser[]) => setUsers(h)
+        const onUserUpdated = (u: PublicUser) => setUsers(prev => prev.some(x => x.id === u.id) ? prev.map(x => x.id === u.id ? u : x) : [...prev, u])
+
+        socket.on('pins-history', onPinsHistory)
+        socket.on('pin-added', onPinAdded)
+        socket.on('requests-history', onRequestsHistory)
+        socket.on('request-created', onRequestCreated)
+        socket.on('request-updated', onRequestUpdated)
+        socket.on('resources-history', onResourcesHistory)
+        socket.on('resource-updated', onResourceUpdated)
+        socket.on('users-history', onUsersHistory)
+        socket.on('user-updated', onUserUpdated)
 
         socket.emit('request-pins-history')
         socket.emit('request-requests-history')
@@ -149,10 +159,10 @@ export function Map() {
 
         return () => {
             if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-            socket.off('pins-history'); socket.off('pin-added')
-            socket.off('requests-history'); socket.off('request-created'); socket.off('request-updated')
-            socket.off('resources-history'); socket.off('resource-updated')
-            socket.off('users-history'); socket.off('user-updated')
+            socket.off('pins-history', onPinsHistory); socket.off('pin-added', onPinAdded)
+            socket.off('requests-history', onRequestsHistory); socket.off('request-created', onRequestCreated); socket.off('request-updated', onRequestUpdated)
+            socket.off('resources-history', onResourcesHistory); socket.off('resource-updated', onResourceUpdated)
+            socket.off('users-history', onUsersHistory); socket.off('user-updated', onUserUpdated)
         }
     }, [username, userId])
 
