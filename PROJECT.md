@@ -29,6 +29,8 @@
 
 - **Chat** in a shared global chatroom in real time.
 - **Mark locations** on a shared map by dropping pins with custom labels (e.g., "Need medical help", "Road blocked").
+- **Seamless Accessibility**: Access via PWA home-screen installation, mDNS domain (`http://cosmos.local:3001`), or instant mobile camera QR code scanning.
+- **Per-Visit Authentication**: Prompt users to enter their name on every new visit/session without permanent local tracking.
 
 The critical design constraint is that **no internet connection is required**. Both map tiles and application assets are served locally from the backend. All communication happens within the LAN via WebSockets.
 

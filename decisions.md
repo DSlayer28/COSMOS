@@ -162,3 +162,16 @@ This document tracks all meaningful technical decisions, architecture choices, a
     *   **AlertBanner**: Smooth slide-in/out CSS transition with a dismiss button, requester info, and gradient dark-red background.
     *   **RequestListPanel**: Added a blurred backdrop overlay, critical count badge, and inline sort pill buttons.
 *   **Reasoning**: A consistent design language across all components reduces cognitive load in high-stress disaster scenarios. The cosmic aesthetic is cohesive with the COSMOS brand name and creates a strong first impression. Bottom sheet modals on mobile significantly improve one-handed usability on phones in field conditions.
+
+### [Feature: Per-Visit Auth & Zero-Hassle PWA/mDNS/QR Access] - 2026-09-21
+
+*   **Context/Problem**: 
+    1. The username prompt was previously persistent in `localStorage`, so returning visitors were never re-prompted to identify themselves upon new visits.
+    2. Users faced friction when attempting to access the server because they had to manually type long local IP addresses (e.g., `192.168.1.45:3001`).
+*   **Decision**:
+    *   **Per-Visit Username**: Switched storage from `localStorage` to `sessionStorage` in `App.tsx`, `UsernamePrompt.tsx`, and `Dashboard.tsx`. Legacy `localStorage` keys are purged on load. New tabs and browser visits prompt the user for their name every session, while active tab reloads preserve identity.
+    *   **PWA Support**: Created `manifest.json`, `sw.js` (service worker), and registered PWA metadata tags in `index.html`. Added an "Install App" button in `Dashboard.tsx` to allow users to add COSMOS directly to their mobile home screen.
+    *   **mDNS Local Domain (`cosmos.local`)**: Integrated `bonjour-service` in `backend/src/index.ts` to publish `http://cosmos.local:3001` across the local network. Users can type `cosmos.local:3001` instead of IP addresses.
+    *   **QR Code Sharing**: Integrated `qrcode-terminal` in the Node.js server console to output an ASCII QR code on startup, and `qrcode` in `Dashboard.tsx` to display a dynamic, scannable QR code modal with one-click copy buttons for `cosmos.local` and LAN IP URLs.
+*   **Reasoning**: `sessionStorage` guarantees per-visit authentication without annoying users on simple page refreshes. Combining PWA home screen installation, mDNS domain resolution, and scannable QR codes completely eliminates the friction of typing IP addresses on phone keyboards during emergency operations.
+

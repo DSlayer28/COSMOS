@@ -12,7 +12,7 @@ export function UsernamePrompt({ onJoined }: { onJoined: (name: string) => void 
     }
 
     return (
-        <div className="min-h-svh bg-[#020617] flex items-center justify-center px-4 py-10 relative overflow-hidden">
+        <div className="min-h-screen min-h-[100dvh] bg-[#020617] flex items-center justify-center px-4 py-10 relative overflow-hidden">
             {/* Multi-layer cosmic background */}
             <div className="absolute inset-0 pointer-events-none">
                 {/* Deep space gradient */}

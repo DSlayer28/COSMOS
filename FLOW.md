@@ -4,28 +4,27 @@ This document maps out how execution travels through the COSMOS application, det
 
 ## 1. Backend Startup (`backend/src/index.ts`)
 1. **Server Initialization**: The Node.js application starts by executing `backend/src/index.ts`.
-2. **Express & Static Files**: An Express app is created. It configures CORS and sets up static file serving for the compiled React frontend (`frontend/cosmos/dist`) and offline map tiles (`../tiles`).
-3. **Socket.io Setup**: An HTTP server wraps the Express app, and Socket.io is attached to it to allow real-time WebSocket connections.
-4. **Listening**: The server starts listening on port 3001. A helper function prints the local and network IPs to the console.
-5. **Connection Handler (`io.on('connection')`)**: When a client connects, the backend:
-    - Extracts the `userName` from the connection query parameters.
-    - Immediately emits `chat-history` and `pins-history` to the connecting client.
-    - Registers listeners for:
-        - `request-chat-history`: Re-emits the chat history.
-        - `request-pins-history`: Re-emits the pins history.
-        - `user-message`: Pushes the new message to the in-memory array and broadcasts `server-message` to all *other* clients.
-        - `add-pin`: Pushes the new pin to the in-memory array and broadcasts `pin-added` to *all* clients.
-        - `create-request`: Validates and pushes new request to the in-memory array and broadcasts `request-created` to *all* clients.
-        - `update-request`: Validates and modifies existing request and broadcasts `request-updated` to *all* clients.
-        - `disconnect`: Logs the user out.
+2. **Express & Static Files**: An Express app is created. It configures CORS and sets up static file serving for the compiled React frontend (`frontend/cosmos/dist`), PWA manifest/service worker, and offline map tiles (`../tiles`).
+3. **mDNS Advertisement**: The server initializes `bonjour-service` to broadcast `http://cosmos.local:3001` on the local Wi-Fi / hotspot network.
+4. **Terminal QR Code**: Upon listening on port 3001, the server generates an ASCII QR Code in the console for instant mobile camera scanning.
+5. **API Endpoint (`/api/network-info`)**: Provides LAN IP, port, network URL, and mDNS domain info to the frontend for in-app QR code generation.
+6. **Socket.io Setup**: An HTTP server wraps the Express app, and Socket.io is attached to it to allow real-time WebSocket connections.
+7. **Connection Handler (`io.on('connection')`)**: When a client connects, the backend:
+    - Extracts the `userName` and `userId` from the connection query parameters.
+    - Immediately emits `chat-history`, `pins-history`, `users-history`, `requests-history`, and `resources-history` to the connecting client.
+    - Registers listeners for real-time events (`user-message`, `add-pin`, `create-request`, `update-request`, `update-resource`, `status-update`, `location-update`).
 
 ## 2. Frontend Startup
 1. **Entry Point (`frontend/cosmos/src/main.tsx`)**: React mounts into the `#root` DOM element and renders the `<App />` component.
-2. **Routing (`frontend/cosmos/src/App.tsx`)**: `App.tsx` conditionally renders `<UsernamePrompt />` if `chat-username` is missing from `localStorage`. Once the username is provided, it sets up the `BrowserRouter` (React Router) with three main routes:
+2. **Service Worker Registration (`index.html`)**: Registers `/sw.js` for Progressive Web App (PWA) caching and installability.
+3. **Per-Visit Authentication (`frontend/cosmos/src/App.tsx`)**: `App.tsx` reads `chat-username` from `sessionStorage`. If missing (new visit or closed tab), it conditionally renders `<UsernamePrompt />`. Once the user enters their name, it saves to `sessionStorage` and renders the React Router routes:
     - `/` -> `<Dashboard />`
     - `/map` -> `<Map />`
     - `/chat` -> `<Chat />`
-3. **Global Socket (`frontend/cosmos/src/socket.ts`)**: This module is evaluated when imported. It retrieves the username from `localStorage` and initializes a `socket.io-client` instance with `autoConnect: true`. `App.tsx` ensures this connection is refreshed immediately if a new username is provided at startup.
+4. **Zero-Hassle LAN Access Flow**:
+    - **PWA Install**: Dashboard captures `beforeinstallprompt` and offers an "Install App" button to place COSMOS on the user's home screen.
+    - **mDNS Resolution**: Mobile/desktop clients on the network navigate to `http://cosmos.local:3001` directly.
+    - **QR Code Sharing**: Users scan the terminal or Dashboard QR code with their mobile camera to connect instantly without typing IP addresses.
 
 ## 3. Component Flows
 

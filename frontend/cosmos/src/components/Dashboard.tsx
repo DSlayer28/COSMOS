@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { socket } from '../socket';
 import type { DisasterRequest, ResourceAggregator } from '../../../../backend/src/shared/types';
 
@@ -9,6 +10,13 @@ export function Dashboard() {
     const [criticalCount, setCriticalCount] = useState(0);
     const [totalNeeds, setTotalNeeds] = useState(0);
     const [openResources, setOpenResources] = useState(0);
+
+    // Network & PWA states
+    const [showQrModal, setShowQrModal] = useState(false);
+    const [networkInfo, setNetworkInfo] = useState<{ ip?: string; port?: string; networkUrl?: string; hostnameUrl?: string; mdnsUrl?: string } | null>(null);
+    const [qrDataUrl, setQrDataUrl] = useState<string>('');
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [copiedText, setCopiedText] = useState<string | null>(null);
 
     const username = localStorage.getItem('chat-username') || 'Responder';
     const userId = localStorage.getItem('chat-userid') || '';
@@ -42,6 +50,31 @@ export function Dashboard() {
         socket.emit('request-requests-history');
         socket.emit('request-resources');
 
+        // PWA install prompt event listener
+        const handleBeforeInstallPrompt = (e: Event) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+        // Fetch network info for QR Code and local domain sharing
+        fetch('/api/network-info')
+            .then(res => res.json())
+            .then(data => {
+                setNetworkInfo(data);
+                const targetUrl = data.networkUrl || window.location.href;
+                QRCode.toDataURL(targetUrl, { margin: 2, width: 220, color: { dark: '#0f172a', light: '#ffffff' } })
+                    .then(url => setQrDataUrl(url))
+                    .catch(console.error);
+            })
+            .catch(() => {
+                const fallbackUrl = window.location.href;
+                setNetworkInfo({ networkUrl: fallbackUrl, mdnsUrl: 'http://cosmos.local:3001' });
+                QRCode.toDataURL(fallbackUrl, { margin: 2, width: 220, color: { dark: '#0f172a', light: '#ffffff' } })
+                    .then(url => setQrDataUrl(url))
+                    .catch(console.error);
+            });
+
         return () => {
             socket.off('users-history', handleUsers);
             socket.off('user-updated');
@@ -49,8 +82,27 @@ export function Dashboard() {
             socket.off('request-created');
             socket.off('request-updated');
             socket.off('resources-history', handleResources);
+            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         };
     }, [username, userId]);
+
+    const handleInstallPWA = async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                setDeferredPrompt(null);
+            }
+        } else {
+            alert('To install COSMOS as an app on your phone:\n\n• iOS (Safari): Tap Share button → "Add to Home Screen"\n• Android (Chrome): Tap menu (⋮) → "Add to Home Screen" or "Install App"');
+        }
+    };
+
+    const copyToClipboard = (text: string, label: string) => {
+        navigator.clipboard.writeText(text);
+        setCopiedText(label);
+        setTimeout(() => setCopiedText(null), 2000);
+    };
 
     const quickActions = [
         { label: 'Medical', intent: 'medical', icon: '🏥', color: 'from-red-950/80 to-red-900/40', border: 'border-red-500/20', text: 'text-red-300', glow: 'hover:shadow-red-500/20', badge: 'bg-red-500/20 text-red-300' },
@@ -61,7 +113,7 @@ export function Dashboard() {
     ];
 
     return (
-        <div className="min-h-svh bg-[#020617] flex flex-col items-center justify-center px-4 sm:px-6 py-8 relative overflow-hidden">
+        <div className="min-h-screen min-h-[100dvh] bg-[#020617] flex flex-col items-center justify-center px-4 sm:px-6 py-8 relative overflow-hidden">
             {/* Background layers */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/30 via-[#020617] to-slate-950" />
@@ -73,10 +125,20 @@ export function Dashboard() {
 
                 {/* ── Header ── */}
                 <div className="text-center mb-8">
-                    {/* Network status pill */}
-                    <div className="inline-flex items-center gap-1.5 bg-slate-900/60 border border-white/[0.06] rounded-full px-3 py-1 mb-5 text-[11px] text-slate-400 backdrop-blur-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/60 animate-pulse" />
-                        Connected to local network
+                    {/* Network status & share pill */}
+                    <div className="flex items-center justify-center gap-2 mb-5">
+                        <div className="inline-flex items-center gap-1.5 bg-slate-900/60 border border-white/[0.06] rounded-full px-3 py-1 text-[11px] text-slate-400 backdrop-blur-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/60 animate-pulse" />
+                            Connected to local network
+                        </div>
+                        <button
+                            onClick={() => setShowQrModal(true)}
+                            className="inline-flex items-center gap-1 bg-indigo-500/15 border border-indigo-500/30 hover:bg-indigo-500/25 text-indigo-300 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer"
+                            title="Share Network QR Code"
+                        >
+                            <span>📲</span>
+                            <span>Share App</span>
+                        </button>
                     </div>
 
                     <h1 className="text-5xl sm:text-6xl font-black text-white tracking-tight mb-2 leading-none">
@@ -125,7 +187,7 @@ export function Dashboard() {
                         <button
                             key={action.intent}
                             onClick={() => navigate(`/map?intent=${action.intent}`)}
-                            className={`cosmos-fade-in group relative flex flex-col items-center justify-center gap-2 py-4 rounded-xl border ${action.border} bg-gradient-to-b ${action.color} transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg ${action.glow} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 overflow-hidden`}
+                            className={`cosmos-fade-in group relative flex flex-col items-center justify-center gap-2 py-4 rounded-xl border ${action.border} bg-gradient-to-b ${action.color} transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg ${action.glow} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 overflow-hidden cursor-pointer`}
                             aria-label={`Open map for ${action.label} request`}
                         >
                             <div className="absolute inset-0 bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-200" />
@@ -162,11 +224,113 @@ export function Dashboard() {
                     </Link>
                 </div>
 
+                {/* ── Seamless PWA Install / Share Banner ── */}
+                <div className="bg-indigo-950/40 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-lg">
+                            📱
+                        </div>
+                        <div>
+                            <div className="text-xs font-bold text-white">Install App / Quick Access</div>
+                            <div className="text-[10px] text-indigo-300/80">Add to home screen or scan QR</div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={handleInstallPWA}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] px-3 py-1.5 rounded-lg transition-colors shadow-sm cursor-pointer"
+                        >
+                            Install
+                        </button>
+                        <button
+                            onClick={() => setShowQrModal(true)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] px-2.5 py-1.5 rounded-lg border border-white/10 transition-colors cursor-pointer"
+                        >
+                            QR Code
+                        </button>
+                    </div>
+                </div>
+
                 {/* ── Footer ── */}
-                <p className="text-center text-slate-700 text-[10px] mt-4 tracking-wide">
-                    Works offline · No internet required
+                <p className="text-center text-slate-700 text-[10px] tracking-wide">
+                    Works offline · No internet required · LAN mDNS enabled
                 </p>
             </div>
+
+            {/* ── Share / QR Code Modal ── */}
+            {showQrModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md cosmos-fade-in">
+                    <div className="relative w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl p-6 shadow-2xl overflow-hidden">
+                        <button
+                            onClick={() => setShowQrModal(false)}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 text-lg cursor-pointer"
+                        >
+                            ✕
+                        </button>
+
+                        <div className="text-center mb-4">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mx-auto mb-2 text-2xl shadow-lg shadow-indigo-500/20">
+                                🌐
+                            </div>
+                            <h3 className="text-lg font-bold text-white">Connect & Share COSMOS</h3>
+                            <p className="text-xs text-slate-400">Scan QR Code with your mobile camera</p>
+                        </div>
+
+                        {/* QR Image */}
+                        <div className="flex justify-center mb-4">
+                            {qrDataUrl ? (
+                                <div className="p-3 bg-white rounded-xl shadow-lg border border-white/20">
+                                    <img src={qrDataUrl} alt="COSMOS Access QR Code" className="w-44 h-44" />
+                                </div>
+                            ) : (
+                                <div className="w-44 h-44 bg-slate-800 rounded-xl flex items-center justify-center text-xs text-slate-400">
+                                    Generating QR Code...
+                                </div>
+                            )}
+                        </div>
+
+                        {/* URLs */}
+                        <div className="space-y-2 mb-4">
+                            {networkInfo?.hostnameUrl && (
+                                <div className="bg-slate-950 border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
+                                    <div className="overflow-hidden">
+                                        <div className="text-[9px] font-bold uppercase text-indigo-400">PC Hostname URL</div>
+                                        <div className="text-xs font-mono text-white truncate">{networkInfo.hostnameUrl}</div>
+                                    </div>
+                                    <button
+                                        onClick={() => copyToClipboard(networkInfo.hostnameUrl!, 'hostname')}
+                                        className="text-[10px] font-semibold text-indigo-300 hover:text-indigo-200 bg-indigo-500/20 px-2 py-1 rounded border border-indigo-500/30 cursor-pointer"
+                                    >
+                                        {copiedText === 'hostname' ? 'Copied!' : 'Copy'}
+                                    </button>
+                                </div>
+                            )}
+
+                            {networkInfo?.networkUrl && (
+                                <div className="bg-slate-950 border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
+                                    <div className="overflow-hidden">
+                                        <div className="text-[9px] font-bold uppercase text-slate-400">Network IP Address</div>
+                                        <div className="text-xs font-mono text-slate-200 truncate">{networkInfo.networkUrl}</div>
+                                    </div>
+                                    <button
+                                        onClick={() => copyToClipboard(networkInfo.networkUrl!, 'ip')}
+                                        className="text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800 px-2 py-1 rounded border border-white/10 cursor-pointer"
+                                    >
+                                        {copiedText === 'ip' ? 'Copied!' : 'Copy'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={handleInstallPWA}
+                            className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                        >
+                            📱 Add COSMOS to Phone Home Screen
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
