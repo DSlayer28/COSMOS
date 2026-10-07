@@ -6,6 +6,8 @@ import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import qrcodeTerminal from 'qrcode-terminal'
+import { Bonjour } from 'bonjour-service'
 import { initDb, upsertUser, updateLocation, updateStatus, setOnlineStatus, getAllUsers, getPublicUser, getUser } from './db'
 
 // Extend socket type to allow custom userName and userId property
@@ -66,8 +68,13 @@ const tilesPath = path.join(__dirname, '../tiles')
 app.use('/tiles', express.static(tilesPath))
 app.use('/tiles', (_req, res) => res.status(404).end()) // prevent fallthrough to index.html
 
-// Serve built React frontend — path relative to compiled dist/index.js
-const frontendDist = path.join(__dirname, '../public')
+// Serve built React frontend — prefer frontend/cosmos/dist if present, fallback to backend/public
+const devDistPath = path.join(__dirname, '../../frontend/cosmos/dist')
+const publicDistPath = path.join(__dirname, '../public')
+const frontendDist = fs.existsSync(path.join(devDistPath, 'index.html'))
+    ? devDistPath
+    : publicDistPath
+
 app.use(express.static(frontendDist))
 
 // Initialize database
@@ -346,34 +353,96 @@ setInterval(() => {
     }
 }, EVALUATION_INTERVAL_MS);
 
-// Catch-all: serve React app for any unknown route (must be AFTER socket.io setup)
-app.use((_req, res) => {
-    res.sendFile(path.join(frontendDist, 'index.html'))
+// Network info endpoint for frontend QR code modal & share features
+app.get('/api/network-info', (_req, res) => {
+    const ip = getLocalIP()
+    const p = process.env.PORT || 3001
+    const host = os.hostname().toLowerCase()
+    res.json({
+        ip,
+        port: p,
+        networkUrl: `http://${ip}:${p}`,
+        hostnameUrl: `http://${host}:${p}`,
+        mdnsUrl: `http://cosmos.local:${p}`
+    })
 })
 
-// Get local network IP to display on startup
-const getLocalIP = () => {
+// Catch-all: serve React app for any unknown route (must be AFTER API routes)
+app.use((_req, res) => {
+    const indexPath = path.join(frontendDist, 'index.html')
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath)
+    } else {
+        res.status(404).send('Frontend build not found.')
+    }
+})
+
+// Get local network IP to display on startup (prioritizing physical Wi-Fi/Ethernet adapters)
+function getLocalIP() {
     const interfaces = os.networkInterfaces()
+    const candidates: string[] = []
+
     for (const name of Object.keys(interfaces)) {
+        const lowerName = name.toLowerCase()
+        // Ignore virtual network adapters (WSL, VirtualBox, VMware, Hyper-V vEthernet, Bluetooth)
+        if (
+            lowerName.includes('vbox') ||
+            lowerName.includes('virtualbox') ||
+            lowerName.includes('wsl') ||
+            lowerName.includes('vethernet') ||
+            lowerName.includes('vmware') ||
+            lowerName.includes('bluetooth')
+        ) {
+            continue
+        }
+
         for (const iface of interfaces[name] ?? []) {
             if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address
+                // Prefer Wi-Fi / WLAN or main Ethernet IP address
+                if (
+                    lowerName.includes('wi-fi') ||
+                    lowerName.includes('wifi') ||
+                    lowerName.includes('wlan') ||
+                    lowerName.includes('ethernet')
+                ) {
+                    return iface.address
+                }
+                candidates.push(iface.address)
             }
         }
     }
-    return 'localhost'
+    return candidates[0] || 'localhost'
 }
 
-const port = process.env.PORT || 3001
+const port = Number(process.env.PORT) || 3001
 server.listen(port, () => {
     const ip = getLocalIP()
-    console.log('╔════════════════════════════════════╗')
-    console.log('║         COSMOS CHAT SERVER         ║')
-    console.log('╠════════════════════════════════════╣')
-    console.log(`║  Local:   http://localhost:${port}     ║`)
-    console.log(`║  Network: http://${ip}:${port}   ║`)
-    console.log('║                                    ║')
-    console.log('║  Share the Network URL with others ║')
-    console.log('║  on the same WiFi or hotspot       ║')
-    console.log('╚════════════════════════════════════╝')
+    const host = os.hostname().toLowerCase()
+    const networkUrl = `http://${ip}:${port}`
+    const hostnameUrl = `http://${host}:${port}`
+    const mdnsUrl = `http://cosmos.local:${port}`
+
+    // Publish mDNS service for cosmos.local
+    try {
+        const bonjour = new Bonjour()
+        bonjour.publish({ name: 'COSMOS Disaster Platform', type: 'http', port, host: 'cosmos.local' })
+        console.log(`📡 mDNS Published: ${mdnsUrl}`)
+    } catch (e) {
+        console.warn('mDNS publication warning:', e)
+    }
+
+    console.log('╔══════════════════════════════════════════════════════════╗')
+    console.log('║               COSMOS DISASTER NETWORK                    ║')
+    console.log('╠══════════════════════════════════════════════════════════╣')
+    console.log(`║  Local:    http://localhost:${port}`.padEnd(59) + '║')
+    console.log(`║  Network:  ${networkUrl}`.padEnd(59) + '║')
+    console.log(`║  PC Name:  ${hostnameUrl}`.padEnd(59) + '║')
+    console.log(`║  mDNS:     ${mdnsUrl}`.padEnd(59) + '║')
+    console.log('║                                                          ║')
+    console.log('║  Scan QR Code below with mobile camera to connect:       ║')
+    console.log('╚══════════════════════════════════════════════════════════╝')
+
+    qrcodeTerminal.generate(networkUrl, { small: true }, (qr: string) => {
+        console.log(qr)
+    })
 })
